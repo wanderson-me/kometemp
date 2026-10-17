@@ -20,6 +20,7 @@ Publicação na nuvem (Docker / Fly.io), variáveis de ambiente e backup: veja [
 ```
 server.js        servidor HTTP, rotas da API, cabeçalhos de segurança
 lib/db.js        SQLite: registros, capas, exportar/importar
+lib/imdb.js      leitura do CSV do IMDb
 lib/tmdb.js      busca de pôsteres no TMDB
 lib/auth.js      senha (scrypt), sessão assinada, limite de tentativas
 public/          index.html, login.html, app.js, styles.css
@@ -40,3 +41,4 @@ legacy/          versão anterior, publicada como Claude Artifact
 | POST / GET | `/api/covers/sync` | iniciar / consultar a busca de capas no TMDB (precisa de `TMDB_API_KEY`) |
 | GET | `/api/export?covers=1` | backup em JSON |
 | POST | `/api/import` | restaurar backup |
+| POST | `/api/import/imdb` | importar CSV exportado do IMDb (corpo = texto do CSV) |

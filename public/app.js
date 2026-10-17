@@ -1152,9 +1152,42 @@
     }).catch(function (e) { finish('Não foi possível buscar capas: ' + e.message); });
   }
   document.getElementById('covers-btn').addEventListener('click', syncCovers);
+
+  var coversEnabled = false;
+  document.getElementById('imdb-import-btn').addEventListener('click', function () {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv,text/csv';
+    input.addEventListener('change', function () {
+      var f = input.files && input.files[0];
+      if (!f) return;
+      var btn = document.getElementById('imdb-import-btn');
+      var label = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Importando…';
+      api('POST', '/api/import/imdb', undefined, new Blob([f], { type: 'text/csv' })).then(function (r) {
+        return api('GET', '/api/entries').then(function (list) {
+          entries = list;
+          render();
+          var msg = r.created + ' novos, ' + r.updated + ' atualizados';
+          var skipped = r.skippedType + r.noId + r.duplicates + r.skipped;
+          if (skipped) msg += ', ' + skipped + ' ignorados';
+          showToast('Importação concluída: ' + msg + '.');
+          if (coversEnabled && r.created) syncCovers();
+        });
+      }).catch(function (err) {
+        showToast('Não foi possível importar: ' + err.message);
+      }).then(function () {
+        btn.disabled = false;
+        btn.textContent = label;
+      });
+    });
+    input.click();
+  });
   api('GET', '/api/me').then(function (me) {
     shareBgVersion = me.shareBg || null;
     renderMovieRecap();
+    coversEnabled = !!me.covers;
     if (me.covers) {
       document.getElementById('covers-btn').classList.remove('hidden');
       document.getElementById('tmdb-note').classList.remove('hidden');

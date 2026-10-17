@@ -72,6 +72,18 @@ npm start                # http://localhost:3000
 
 Precisa de Node 22.13+. Para testar: `npm test`.
 
+## Importar o CSV exportado do IMDb
+
+1. No IMDb, abra **Suas avaliações** (ou uma lista sua) e use **Exportar** para baixar o CSV.
+2. No app, clique em **Importar CSV do IMDb** (barra lateral) e escolha o arquivo.
+
+Regras da importação (pode repetir quantas vezes quiser, sem duplicar):
+- O filme/série é reconhecido pelo código `tt...`. Se já existe, o app atualiza **nota, gêneros, duração e ano** e mantém seu título, data, anotações e capa.
+- Nota do IMDb (1–10) vira estrelas (1–5): 1–2 → 1, 3–4 → 2, 5–6 → 3, 7–8 → 4, 9–10 → 5.
+- Séries entram como séries; episódios e jogos do CSV são ignorados.
+- Gêneros são traduzidos (Crime → Policial, Thriller → Suspense etc.). A data da avaliação **não** vira "assistido em", para não bagunçar o resumo do mês.
+- Com a chave do TMDB configurada, as capas dos itens novos são buscadas automaticamente depois da importação.
+
 ## Capas automáticas (TMDB)
 
 O app pode buscar o pôster de cada filme/série pelo código do IMDb que você cadastrou. Precisa de uma chave gratuita do TMDB:

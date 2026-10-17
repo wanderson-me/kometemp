@@ -6,6 +6,7 @@ const path = require('node:path');
 const db = require('./lib/db');
 const auth = require('./lib/auth');
 const { createTmdb, imdbId } = require('./lib/tmdb');
+const imdbImport = require('./lib/imdb');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const MIME = {
@@ -268,6 +269,12 @@ function createApp(cfg) {
       return json(req, res, 200, store.exportAll(withCovers), {
         'Content-Disposition': 'attachment; filename="meu-arquivo-' + stamp + (withCovers ? '-com-capas' : '') + '.json"'
       });
+    }
+    if (p === '/api/import/imdb' && method === 'POST') {
+      const csv = (await readBody(req, 20 * 1024 * 1024)).toString('utf8');
+      const { items, summary } = imdbImport.buildImport(csv, store.list());
+      const result = store.importMany(items);
+      return json(req, res, 200, Object.assign({}, summary, result));
     }
     if (p === '/api/import' && method === 'POST') {
       const items = await readJson(req, 100 * 1024 * 1024);
