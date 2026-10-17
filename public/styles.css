@@ -378,7 +378,14 @@
     padding: 0;
     line-height: 1;
   }
+  .star-input button { position: relative; }
   .star-input button.filled { color: var(--series-deep); }
+  .star-input button.half::after {
+    content: '★'; position: absolute; left: 0; top: 0; width: 50%; overflow: hidden; color: var(--series-deep);
+  }
+  /* Meia estrela nas exibições: estrela vazia com a metade esquerda preenchida */
+  .star-half { position: relative; display: inline-block; }
+  .star-half::after { content: '★'; position: absolute; left: 0; top: 0; width: 50%; overflow: hidden; }
   .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
   .btn-secondary {
     background: transparent;

@@ -96,10 +96,17 @@
     });
   }
 
-  function starsMarkup(rating, interactiveId) {
+  // Nota em estrelas, com meia estrela (3,5). Aceita número ou texto.
+  function num(r) { var n = parseFloat(r); return isFinite(n) ? n : 0; }
+  function formatRating(r) { return String(num(r)).replace('.', ','); }
+
+  function starsMarkup(rating) {
+    rating = num(rating);
     var out = '';
     for (var i = 1; i <= 5; i++) {
-      out += '<span class="' + (i <= rating ? '' : 'empty-star') + '">' + (i <= rating ? '★' : '☆') + '</span>';
+      if (i <= rating) out += '<span>★</span>';
+      else if (i - 0.5 === rating) out += '<span class="star-half empty-star">☆</span>';
+      else out += '<span class="empty-star">☆</span>';
     }
     return out;
   }
@@ -232,7 +239,7 @@
       var posterInner = hasCover
         ? '<div class="poster-img" style="background-image:url(&quot;' + escapeHtml(e.coverUrl) + '&quot;)"></div>'
         : '<div class="poster-img poster-placeholder" style="' + posterPlaceholder(e) + '"><span class="poster-initial">' + escapeHtml((e.title || '?').trim().charAt(0).toUpperCase()) + '</span></div>';
-      var ratingBadge = e.rating ? '<span class="poster-rating">★ ' + e.rating + '</span>' : '';
+      var ratingBadge = e.rating ? '<span class="poster-rating">★ ' + formatRating(e.rating) + '</span>' : '';
       var statusBadge = e.status ? '<span class="poster-status">' + escapeHtml(e.status) + '</span>' : '';
       var genreHtml = '';
       if (e.genres && e.genres.length) {
@@ -314,8 +321,8 @@
     var monthMinutes = monthMovies.reduce(function (s, e) { return s + (parseInt(e.duration, 10) || 0); }, 0);
     var topMovie = null;
     monthMovies.forEach(function (e) {
-      var r = parseInt(e.rating, 10) || 0;
-      if (r > 0 && (!topMovie || r > (parseInt(topMovie.rating, 10) || 0))) {
+      var r = num(e.rating);
+      if (r > 0 && (!topMovie || r > num(topMovie.rating))) {
         topMovie = e;
       }
     });
@@ -393,7 +400,7 @@
     lines.push(d.totalCount + ' filmes assistidos no total (' + formatDuration(d.totalMinutes) + ')');
     if (d.topMovie) {
       lines.push('');
-      lines.push('⭐ Filme do mês: ' + d.topMovie.title + ' (' + (parseInt(d.topMovie.rating, 10) || 0) + '/5)');
+      lines.push('⭐ Filme do mês: ' + d.topMovie.title + ' (' + formatRating(d.topMovie.rating) + '/5)');
     }
     lines.push('');
     lines.push('Este mês (' + d.monthMovies.length + '):');
@@ -672,8 +679,16 @@
       t.lines.forEach(function (ln, i) { ctx.fillText(ln, tx, ty + i * t.size * 0.98); });
       var after = ty + (t.lines.length - 1) * t.size * 0.98 + 26;
 
+      var topRating = num(top.rating);
       for (var s = 1; s <= 5; s++) {
-        drawStar(ctx, tx + 13 + (s - 1) * 32, after, 12, s <= (top.rating || 0) ? SHARE.STAR : 'rgba(255,255,255,0.2)');
+        var sx = tx + 13 + (s - 1) * 32;
+        drawStar(ctx, sx, after, 12, s <= topRating ? SHARE.STAR : 'rgba(255,255,255,0.2)');
+        if (s - 0.5 === topRating) {
+          ctx.save();
+          ctx.beginPath(); ctx.rect(sx - 14, after - 14, 14, 28); ctx.clip();
+          drawStar(ctx, sx, after, 12, SHARE.STAR);
+          ctx.restore();
+        }
       }
       var gtxt = (top.genres && top.genres.length) ? top.genres.join(', ') : '';
       if (gtxt) {
@@ -826,10 +841,10 @@
 
   function fieldForType(type, existing) {
     existing = existing || {};
-    var rating = existing.rating || 0;
+    var rating = num(existing.rating);
     var starsHtml = '';
     for (var i = 1; i <= 5; i++) {
-      starsHtml += '<button type="button" data-val="' + i + '" class="' + (i <= rating ? 'filled' : '') + '">★</button>';
+      starsHtml += '<button type="button" data-val="' + i + '" class="' + (i <= rating ? 'filled' : (i - 0.5 === rating ? 'half' : '')) + '" title="Clique na metade esquerda para meia estrela">★</button>';
     }
     var extraField = '';
     if (type === 'game') {
@@ -907,14 +922,19 @@
     panel.dataset.type = type;
 
     panel.querySelectorAll('.star-input button').forEach(function (b) {
-      b.addEventListener('click', function () {
+      b.addEventListener('click', function (ev) {
         var val = parseInt(b.dataset.val, 10);
+        // Metade esquerda da estrela = meia estrela (ex.: 3,5). Clicar de novo na mesma nota a zera.
+        var left = ev.offsetX > 0 && ev.offsetX < b.offsetWidth / 2;
+        var picked = left ? val - 0.5 : val;
         var hidden = panel.querySelector('input[name="rating"]');
-        var current = parseInt(hidden.value, 10) || 0;
-        var newVal = (current === val) ? val - 1 : val;
+        var current = num(hidden.value);
+        var newVal = (current === picked) ? 0 : picked;
         hidden.value = newVal;
         panel.querySelectorAll('.star-input button').forEach(function (bb) {
-          bb.classList.toggle('filled', parseInt(bb.dataset.val, 10) <= newVal);
+          var v = parseInt(bb.dataset.val, 10);
+          bb.classList.toggle('filled', v <= newVal);
+          bb.classList.toggle('half', v - 0.5 === newVal);
         });
       });
     });
@@ -989,7 +1009,7 @@
       type: type,
       title: title,
       date: fd.get('date') || '',
-      rating: parseInt(fd.get('rating'), 10) || 0,
+      rating: num(fd.get('rating')),
       notes: (fd.get('notes') || '').toString().trim(),
       imdbUrl: normalizeImdbInput(fd.get('imdbUrl'))
     };

@@ -92,6 +92,13 @@ test('validação rejeita dados inválidos', async () => {
   const clamp = await call('POST', '/api/entries', { type: 'movie', title: 'Nota', rating: 99 });
   assert.equal(clamp.data.rating, 5);
   await call('DELETE', '/api/entries/' + clamp.data.id);
+  const halfStar = await call('POST', '/api/entries', { type: 'movie', title: 'Meia', rating: 3.5 });
+  assert.equal(halfStar.data.rating, 3.5);
+  assert.equal((await call('GET', '/api/entries/' + halfStar.data.id)).data.rating, 3.5);
+  const odd = await call('POST', '/api/entries', { type: 'movie', title: 'Quebrada', rating: 3.8 });
+  assert.equal(odd.data.rating, 4);
+  await call('DELETE', '/api/entries/' + halfStar.data.id);
+  await call('DELETE', '/api/entries/' + odd.data.id);
 });
 
 test('capa: envia imagem, serve com login, rejeita não-imagem e remove', async () => {
