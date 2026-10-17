@@ -19,6 +19,21 @@ O app é um servidor Node.js (22.13 ou mais novo) com banco SQLite. Não tem dep
 | `SESSION_SECRET` | não | Segredo da sessão. Se vazio, é gerado e guardado em `DATA_DIR` |
 | `AUTO_SEED` | não (padrão `1`) | Na primeira execução, com banco vazio, importa `seed/entries.json` (seus 622 registros + 3 capas) |
 
+## Opção 0 — Em casa, sem custo (Proxmox, mini PC, Raspberry, VPS próprio)
+
+Num Debian/Ubuntu (por exemplo um container LXC no Proxmox, com 1 vCPU, 512 MB de RAM e 4 GB de disco), como root:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/wanderson-me/kometemp/main/deploy/install-linux.sh -o install.sh
+bash install.sh
+```
+
+O script instala o Node 22, baixa o app, pergunta usuário e senha, cria o serviço `meu-arquivo` (sobe sozinho com a máquina) e mostra o endereço `http://IP:3000`. Os dados ficam em `/var/lib/meu-arquivo`. Para atualizar, rode `bash install.sh` de novo.
+
+- Em rede local por HTTP, o login funciona normalmente. Para HTTPS e acesso de fora, use Tailscale (`tailscale serve --bg 3000`) ou um proxy como o Caddy. Em container LXC, o Tailscale precisa do `/dev/net/tun` liberado na configuração do container.
+- Backup: inclua o container no backup do Proxmox e/ou use **Baixar backup** dentro do app.
+- Comandos úteis: `systemctl status meu-arquivo`, `journalctl -u meu-arquivo -f`.
+
 ## Opção A — Fly.io (usa o `fly.toml` do repositório)
 
 Pré-requisito: conta no Fly.io e a CLI `flyctl` instalada (https://fly.io/docs/flyctl/install/). Consulte o preço atual na página deles; um app pequeno com 1 volume costuma ficar baixo.
