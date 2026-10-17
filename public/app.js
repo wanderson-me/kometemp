@@ -10,6 +10,7 @@
   };
 
   var entries = [];
+  var shareBgVersion = null;
 
   var state = {
     activeTab: 'game',
@@ -321,6 +322,13 @@
     return { totalCount: totalCount, totalMinutes: totalMinutes, monthLabel: monthLabel, monthMovies: monthMovies, monthMinutes: monthMinutes, topMovie: topMovie };
   }
 
+  function canShareFiles() {
+    try {
+      if (!(window.matchMedia && matchMedia('(pointer: coarse)').matches)) return false;
+      return !!(navigator.canShare && navigator.canShare({ files: [new File(['x'], 'a.png', { type: 'image/png' })] }));
+    } catch (err) { return false; }
+  }
+
   function renderMovieRecap() {
     var el = document.getElementById('movie-recap');
     if (state.activeTab !== 'movie') {
@@ -371,6 +379,9 @@
       '<div class="recap-actions">' +
         '<button type="button" class="btn-secondary" id="recap-copy-btn">Copiar texto</button>' +
         '<button type="button" class="btn-add" id="recap-image-btn">Baixar imagem</button>' +
+        (canShareFiles() ? '<button type="button" class="btn-secondary" id="recap-share-btn">Compartilhar</button>' : '') +
+        '<button type="button" class="btn-secondary" id="recap-bg-btn">' + (shareBgVersion ? 'Trocar fundo' : 'Escolher fundo') + '</button>' +
+        (shareBgVersion ? '<button type="button" class="btn-secondary" id="recap-bg-remove">Remover fundo</button>' : '') +
       '</div>';
   }
 
@@ -407,43 +418,394 @@
     }
   }
 
-  async function downloadRecapImage() {
-    if (typeof html2canvas === 'undefined') {
-      showToast('Não foi possível gerar a imagem agora.');
-      return;
+  // ---- Imagem quadrada (800x800) para redes sociais, desenhada direto no canvas ----
+  var SHARE = { W: 800, M: 48, BG: '#1c1914', GOLD: '#f6dfab', STAR: '#e8c267', DISPLAY: '"Bebas Neue", "Arial Narrow", Impact, sans-serif', BODY: '"Work Sans", -apple-system, "Segoe UI", sans-serif' };
+
+  function loadImage(src) {
+    return new Promise(function (resolve) {
+      if (!src) { resolve(null); return; }
+      var img = new Image();
+      img.onload = function () { resolve(img); };
+      img.onerror = function () { resolve(null); };
+      img.src = src;
+    });
+  }
+
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function wrapLines(ctx, text, maxW) {
+    var words = String(text).split(/\s+/).filter(Boolean);
+    var lines = [];
+    var cur = '';
+    words.forEach(function (w) {
+      var test = cur ? cur + ' ' + w : w;
+      if (cur && ctx.measureText(test).width > maxW) { lines.push(cur); cur = w; } else { cur = test; }
+    });
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
+  function ellipsize(ctx, text, maxW) {
+    if (ctx.measureText(text).width <= maxW) return text;
+    while (text.length > 1 && ctx.measureText(text + '…').width > maxW) text = text.slice(0, -1);
+    return text + '…';
+  }
+
+  function fitText(ctx, text, family, weight, sizes, maxW, maxLines) {
+    var lines = [];
+    var size = sizes[sizes.length - 1];
+    for (var i = 0; i < sizes.length; i++) {
+      size = sizes[i];
+      ctx.font = weight + ' ' + size + 'px ' + family;
+      lines = wrapLines(ctx, text, maxW);
+      if (lines.length <= maxLines) return { size: size, lines: lines };
     }
-    var card = document.getElementById('recap-card');
-    if (!card) return;
+    lines = lines.slice(0, maxLines);
+    lines[maxLines - 1] = ellipsize(ctx, lines[maxLines - 1] + ' …', maxW);
+    return { size: size, lines: lines };
+  }
+
+  function drawStar(ctx, cx, cy, r, fill) {
+    ctx.beginPath();
+    for (var k = 0; k < 10; k++) {
+      var rad = (k % 2 === 0) ? r : r * 0.45;
+      var a = -Math.PI / 2 + k * Math.PI / 5;
+      ctx.lineTo(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad);
+    }
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+
+  function drawPoster(ctx, e, img, x, y, w, h, radius) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 6;
+    roundRectPath(ctx, x, y, w, h, radius);
+    ctx.fillStyle = '#2d251d';
+    ctx.fill();
+    ctx.restore();
+    ctx.save();
+    roundRectPath(ctx, x, y, w, h, radius);
+    ctx.clip();
+    if (img) {
+      var sc = Math.max(w / img.width, h / img.height);
+      var sw = w / sc, sh = h / sc;
+      ctx.drawImage(img, (img.width - sw) / 2, (img.height - sh) / 2, sw, sh, x, y, w, h);
+    } else {
+      var pal = { movie: ['#c1542e', '#7a3119'], series: ['#b9842a', '#6f5215'], game: ['#4f7a52', '#2d472f'] }[e.type] || ['#c1542e', '#7a3119'];
+      var th = ((hashStr(e.title) % 140) + 20) * Math.PI / 180;
+      var vx = Math.sin(th), vy = -Math.cos(th);
+      var len = Math.abs(w * vx) + Math.abs(h * vy);
+      var cx = x + w / 2, cy = y + h / 2;
+      var g = ctx.createLinearGradient(cx - vx * len / 2, cy - vy * len / 2, cx + vx * len / 2, cy + vy * len / 2);
+      g.addColorStop(0, pal[0]);
+      g.addColorStop(1, pal[1]);
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = 'rgba(255,255,255,0.88)';
+      ctx.font = Math.round(h * 0.3) + 'px ' + SHARE.DISPLAY;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText((e.title || '?').trim().charAt(0).toUpperCase(), x + w / 2, y + h / 2);
+    }
+    ctx.restore();
+  }
+
+  async function buildShareImage() {
+    var d = getRecapData();
+    var W = SHARE.W, M = SHARE.M, CW = W - 2 * M;
+    try {
+      await Promise.all([
+        document.fonts.load('64px "Bebas Neue"'),
+        document.fonts.load('400 16px "Work Sans"'),
+        document.fonts.load('600 18px "Work Sans"')
+      ]);
+    } catch (err) { /* usa as fontes de reserva */ }
+
+    var n = d.monthMovies.length;
+    var top = d.topMovie;
+    var hasHero = !!top;
+
+    // Layout da faixa de pôsteres: o maior tamanho em que todos cabem (até 3 linhas)
+    var HERO_H = 210;
+    var headBottom = M + 78 + 24 + 74 + 28;           // fim do cabeçalho + números
+    var regionTop = headBottom + (hasHero ? HERO_H + 28 + 26 : 0);
+    var footerY = W - M + 4;
+    var regionBottom = footerY - 34;
+    var gridTop = regionTop + 36;
+    var availH = regionBottom - gridTop;
+    var tileW = 48, perRow = 1, rows = 1, overflow = 0;
+    var shown = d.monthMovies;
+    var fitted = false;
+    for (var tw0 = 133; tw0 >= 48 && !fitted; tw0--) {
+      var th0 = Math.round(tw0 * 1.5);
+      var r0 = Math.min(3, Math.floor((availH + 8) / (th0 + 8)));
+      var c0 = Math.floor((CW + 8) / (tw0 + 8));
+      if (r0 >= 1 && c0 * r0 >= n) {
+        tileW = tw0; perRow = c0; rows = Math.max(1, Math.ceil(n / c0)); fitted = true;
+      }
+    }
+    if (!fitted) {
+      tileW = 48;
+      perRow = Math.floor((CW + 8) / (tileW + 8));
+      rows = Math.max(1, Math.min(3, Math.floor((availH + 8) / (Math.round(tileW * 1.5) + 8))));
+      var cap = perRow * rows;
+      shown = d.monthMovies.slice(0, cap - 1);
+      overflow = n - shown.length;
+    }
+    var tileH = Math.round(tileW * 1.5);
+
+    var imgs = await Promise.all([loadImage(top && top.coverUrl), loadImage(shareBgVersion ? '/share-bg?v=' + shareBgVersion : null)]
+      .concat(shown.map(function (e) { return loadImage(e.coverUrl); })));
+    var topImg = imgs[0];
+    var bgImg = imgs[1];
+    imgs.splice(1, 1); // deixa imgs[i + 1] = pôster de shown[i]
+
+    var S = 2;
+    var big = document.createElement('canvas');
+    big.width = W * S;
+    big.height = W * S;
+    var ctx = big.getContext('2d');
+    ctx.scale(S, S);
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+
+    // Fundo
+    ctx.fillStyle = SHARE.BG;
+    ctx.fillRect(0, 0, W, W);
+    var bg = ctx.createLinearGradient(0, 0, W, W);
+    bg.addColorStop(0, '#241f19');
+    bg.addColorStop(0.55, '#2d251d');
+    bg.addColorStop(1, '#6b2f19');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, W);
+
+    if (bgImg) {
+      // Ilustração do usuário ao fundo, com opacidade baixa, e um véu escuro para o texto ficar legível.
+      ctx.save();
+      ctx.globalAlpha = 0.34;
+      var bs = Math.max(W / bgImg.width, W / bgImg.height);
+      var bw = bgImg.width * bs, bh = bgImg.height * bs;
+      ctx.drawImage(bgImg, (W - bw) / 2, (W - bh) / 2, bw, bh);
+      ctx.restore();
+      var veil = ctx.createLinearGradient(0, 0, 0, W);
+      veil.addColorStop(0, 'rgba(20,16,12,0.62)');
+      veil.addColorStop(0.45, 'rgba(20,16,12,0.30)');
+      veil.addColorStop(1, 'rgba(20,16,12,0.72)');
+      ctx.fillStyle = veil;
+      ctx.fillRect(0, 0, W, W);
+    }
+
+    // Cabeçalho: "Meu registro" + mês e ano no mesmo título
+    var monthTitle = d.monthLabel.charAt(0).toUpperCase() + d.monthLabel.slice(1);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '78px ' + SHARE.DISPLAY;
+    var h1 = 'Meu registro';
+    ctx.fillText(h1, M, M + 56);
+    var h1w = ctx.measureText(h1).width;
+    var monthSize = 46;
+    ctx.font = monthSize + 'px ' + SHARE.DISPLAY;
+    while (monthSize > 28 && h1w + 18 + ctx.measureText(monthTitle).width > CW) {
+      monthSize -= 2;
+      ctx.font = monthSize + 'px ' + SHARE.DISPLAY;
+    }
+    ctx.fillStyle = SHARE.GOLD;
+    ctx.fillText(monthTitle, M + h1w + 18, M + 56);
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fillRect(M, M + 78, CW, 1);
+
+    // Números do mês
+    var statsY = M + 78 + 24;
+    var colW = CW / 3;
+    var monthName = MONTH_NAMES[new Date().getMonth()];
+    var stats = [
+      { v: String(n), l: (n === 1 ? 'filme em ' : 'filmes em ') + monthName },
+      { v: d.monthMinutes ? formatDuration(d.monthMinutes) : '—', l: 'assistidos no mês' },
+      { v: String(d.totalCount), l: 'filmes no total' }
+    ];
+    stats.forEach(function (st, i) {
+      var x = M + i * colW;
+      ctx.fillStyle = '#ffffff';
+      var vs = 60;
+      ctx.font = vs + 'px ' + SHARE.DISPLAY;
+      while (vs > 30 && ctx.measureText(st.v).width > colW - 20) { vs -= 2; ctx.font = vs + 'px ' + SHARE.DISPLAY; }
+      ctx.fillText(st.v, x, statsY + 50);
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.font = '400 16px ' + SHARE.BODY;
+      ctx.fillText(ellipsize(ctx, st.l, colW - 12), x, statsY + 74);
+    });
+
+    var cursor = statsY + 74 + 28;
+
+    // Filme do mês
+    if (hasHero) {
+      var hh = HERO_H, hw = Math.round(hh / 1.5);
+      var boxH = hh + 28;
+      ctx.save();
+      roundRectPath(ctx, M, cursor, CW, boxH, 16);
+      var hg = ctx.createLinearGradient(M, cursor, M + CW, cursor + boxH);
+      hg.addColorStop(0, 'rgba(185,132,42,0.26)');
+      hg.addColorStop(1, 'rgba(185,132,42,0.05)');
+      ctx.fillStyle = hg;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(185,132,42,0.5)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+
+      drawPoster(ctx, top, topImg, M + 14, cursor + 14, hw, hh, 8);
+
+      var tx = M + 14 + hw + 26;
+      var tw = M + CW - 20 - tx;
+      ctx.fillStyle = SHARE.STAR;
+      ctx.font = '600 17px ' + SHARE.BODY;
+      ctx.fillText('Filme do mês', tx, cursor + 14 + 22);
+
+      var t = fitText(ctx, top.title, SHARE.DISPLAY, '', [64, 54, 46, 40], tw, 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = t.size + 'px ' + SHARE.DISPLAY;
+      var ty = cursor + 14 + 22 + 10 + t.size * 0.9;
+      t.lines.forEach(function (ln, i) { ctx.fillText(ln, tx, ty + i * t.size * 0.98); });
+      var after = ty + (t.lines.length - 1) * t.size * 0.98 + 26;
+
+      for (var s = 1; s <= 5; s++) {
+        drawStar(ctx, tx + 13 + (s - 1) * 32, after, 12, s <= (top.rating || 0) ? SHARE.STAR : 'rgba(255,255,255,0.2)');
+      }
+      var gtxt = (top.genres && top.genres.length) ? top.genres.join(', ') : '';
+      if (gtxt) {
+        var gl = fitText(ctx, gtxt, SHARE.BODY, '400', [18, 16], tw, 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.68)';
+        ctx.font = '400 ' + gl.size + 'px ' + SHARE.BODY;
+        gl.lines.forEach(function (ln, i) { ctx.fillText(ln, tx, after + 34 + i * (gl.size + 5)); });
+      }
+      cursor += boxH + 26;
+    }
+
+    // Faixa de pôsteres do mês
+    if (n === 0) {
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.font = '400 20px ' + SHARE.BODY;
+      ctx.textAlign = 'center';
+      ctx.fillText('Nenhum filme registrado este mês ainda.', W / 2, (regionTop + regionBottom) / 2);
+      ctx.textAlign = 'left';
+    } else {
+      ctx.fillStyle = SHARE.GOLD;
+      ctx.font = '30px ' + SHARE.DISPLAY;
+      ctx.fillText('Este mês', M, regionTop + 22);
+      var gridH = rows * tileH + (rows - 1) * 8;
+      var gx = M;
+      var gy = gridTop + Math.max(0, Math.floor((availH - gridH) / 2));
+      var total = shown.length + (overflow ? 1 : 0);
+      for (var q = 0; q < total; q++) {
+        var col = q % perRow, row = Math.floor(q / perRow);
+        var px = gx + col * (tileW + 8), py = gy + row * (tileH + 8);
+        if (q < shown.length) {
+          drawPoster(ctx, shown[q], imgs[q + 1], px, py, tileW, tileH, 6);
+        } else {
+          ctx.save();
+          roundRectPath(ctx, px, py, tileW, tileH, 6);
+          ctx.fillStyle = 'rgba(255,255,255,0.1)';
+          ctx.fill();
+          ctx.restore();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = Math.round(tileH * 0.34) + 'px ' + SHARE.DISPLAY;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('+' + overflow, px + tileW / 2, py + tileH / 2);
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'alphabetic';
+        }
+      }
+    }
+
+    // Rodapé
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    ctx.fillRect(M, footerY - 22, CW, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = '600 15px ' + SHARE.BODY;
+    ctx.fillText('Meu Arquivo', M, footerY);
+    ctx.textAlign = 'right';
+    ctx.font = '400 15px ' + SHARE.BODY;
+    ctx.fillText(d.totalMinutes ? 'tempo total: ' + formatDuration(d.totalMinutes) : '', W - M, footerY);
+    ctx.textAlign = 'left';
+
+    // Saída final: exatamente 800x800 (desenhado em 2x e reduzido para ficar nítido)
+    var out = document.createElement('canvas');
+    out.width = W;
+    out.height = W;
+    var octx = out.getContext('2d');
+    octx.imageSmoothingEnabled = true;
+    octx.imageSmoothingQuality = 'high';
+    octx.drawImage(big, 0, 0, W, W);
+    return new Promise(function (resolve) { out.toBlob(resolve, 'image/png'); });
+  }
+
+  function recapFileName() {
+    return 'meu-registro-' + new Date().toISOString().slice(0, 7) + '.png';
+  }
+
+  async function downloadRecapImage() {
     var btn = document.getElementById('recap-image-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
     try {
-      var canvas = await html2canvas(card, { backgroundColor: '#241f19', scale: 2 });
-      var SIZE = 800;
-      var out = document.createElement('canvas');
-      out.width = SIZE;
-      out.height = SIZE;
-      var octx = out.getContext('2d');
-      octx.fillStyle = '#241f19';
-      octx.fillRect(0, 0, SIZE, SIZE);
-      var fit = Math.min(SIZE / canvas.width, SIZE / canvas.height);
-      var fw = canvas.width * fit;
-      var fh = canvas.height * fit;
-      octx.drawImage(canvas, (SIZE - fw) / 2, (SIZE - fh) / 2, fw, fh);
-      out.toBlob(function (blob) {
-        if (btn) { btn.disabled = false; btn.textContent = 'Baixar imagem'; }
-        if (!blob) { showToast('Não foi possível gerar a imagem.'); return; }
-        var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'meu-registro-' + new Date().toISOString().slice(0, 7) + '.png';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
-        showToast('Imagem salva!');
-      }, 'image/png');
+      var blob = await buildShareImage();
+      if (!blob) throw new Error('sem imagem');
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = recapFileName();
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      showToast('Imagem salva!');
     } catch (err) {
-      if (btn) { btn.disabled = false; btn.textContent = 'Baixar imagem'; }
       showToast('Não foi possível gerar a imagem.');
+    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Baixar imagem'; }
+  }
+
+  function pickShareBg() {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.addEventListener('change', function () {
+      var f = input.files && input.files[0];
+      if (!f) return;
+      showToast('Enviando fundo…');
+      api('PUT', '/api/share-bg', undefined, f).then(function (r) {
+        shareBgVersion = r.shareBg;
+        renderMovieRecap();
+        showToast('Fundo atualizado. A próxima imagem já usa ele.');
+      }).catch(function (err) { showToast('Não foi possível enviar o fundo: ' + err.message); });
+    });
+    input.click();
+  }
+
+  function removeShareBg() {
+    api('DELETE', '/api/share-bg').then(function () {
+      shareBgVersion = null;
+      renderMovieRecap();
+      showToast('Fundo removido.');
+    }).catch(function (err) { showToast(err.message); });
+  }
+
+  async function shareRecapImage() {
+    try {
+      var blob = await buildShareImage();
+      var file = new File([blob], recapFileName(), { type: 'image/png' });
+      await navigator.share({ files: [file], title: 'Meu registro' });
+    } catch (err) {
+      if (!err || err.name !== 'AbortError') showToast('Não foi possível compartilhar.');
     }
   }
 
@@ -692,6 +1054,9 @@
   document.getElementById('movie-recap').addEventListener('click', function (e) {
     if (e.target.closest('#recap-copy-btn')) { copyRecapText(); return; }
     if (e.target.closest('#recap-image-btn')) { downloadRecapImage(); return; }
+    if (e.target.closest('#recap-share-btn')) { shareRecapImage(); return; }
+    if (e.target.closest('#recap-bg-btn')) { pickShareBg(); return; }
+    if (e.target.closest('#recap-bg-remove')) { removeShareBg(); return; }
   });
 
   document.getElementById('genre-breakdown').addEventListener('click', function (e) {
@@ -781,6 +1146,8 @@
   }
   document.getElementById('covers-btn').addEventListener('click', syncCovers);
   api('GET', '/api/me').then(function (me) {
+    shareBgVersion = me.shareBg || null;
+    renderMovieRecap();
     if (me.covers) {
       document.getElementById('covers-btn').classList.remove('hidden');
       document.getElementById('tmdb-note').classList.remove('hidden');

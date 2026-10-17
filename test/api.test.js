@@ -161,3 +161,35 @@ test('limite de tentativas de login (5 falhas bloqueiam)', async () => {
   // mesmo com a senha certa, o IP segue bloqueado por 15 min
   assert.equal((await call('POST', '/api/login', { username: 'eu', password: 'senha-longa-123' })).status, 429);
 });
+
+test('fundo da imagem de compartilhamento: envia, serve só com login e remove', async () => {
+  // o teste anterior esgotou o limite de login do IP; usa outro app isolado
+  const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'ma-bg-'));
+  const app = createApp(loadConfig({ DATA_DIR: dir2, APP_USERNAME: 'eu', APP_PASSWORD: 'senha-longa-123', AUTO_SEED: '0' }));
+  await new Promise((r) => app.server.listen(0, '127.0.0.1', r));
+  const b = 'http://127.0.0.1:' + app.server.address().port;
+  const lg = await fetch(b + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'eu', password: 'senha-longa-123' }) });
+  const ck = lg.headers.get('set-cookie').split(';')[0];
+  try {
+    assert.equal((await (await fetch(b + '/api/me', { headers: { cookie: ck } })).json()).shareBg, null);
+    assert.equal((await fetch(b + '/share-bg', { headers: { cookie: ck } })).status, 404);
+
+    const bad = await fetch(b + '/api/share-bg', { method: 'PUT', headers: { cookie: ck }, body: Buffer.from('não sou imagem') });
+    assert.equal(bad.status, 415);
+
+    const ok = await fetch(b + '/api/share-bg', { method: 'PUT', headers: { cookie: ck }, body: PNG });
+    assert.equal(ok.status, 200);
+    const v = (await ok.json()).shareBg;
+    assert.ok(v > 0);
+    const img = await fetch(b + '/share-bg?v=' + v, { headers: { cookie: ck } });
+    assert.equal(img.status, 200);
+    assert.equal(img.headers.get('content-type'), 'image/png');
+    assert.equal((await fetch(b + '/share-bg', { redirect: 'manual' })).status, 302); // sem login vai para /login
+
+    await fetch(b + '/api/share-bg', { method: 'DELETE', headers: { cookie: ck } });
+    assert.equal((await fetch(b + '/share-bg', { headers: { cookie: ck } })).status, 404);
+  } finally {
+    await new Promise((r) => app.server.close(r));
+    fs.rmSync(dir2, { recursive: true, force: true });
+  }
+});

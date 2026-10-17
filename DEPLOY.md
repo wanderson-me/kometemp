@@ -99,5 +99,5 @@ O servidor precisa alcançar `api.themoviedb.org` e `image.tmdb.org`. Capas que 
 
 ## Observações
 
-- A imagem do resumo mensal (800×800) usa a biblioteca html2canvas carregada do cdnjs; o navegador precisa de acesso a ela. As fontes vêm do Google Fonts.
+- A imagem do resumo mensal (800×800) é desenhada no próprio navegador, sem bibliotecas externas. As fontes vêm do Google Fonts (sem elas, usa fontes de reserva). O fundo opcional da imagem fica em `DATA_DIR/share-bg.*` (fora do Git) e é enviado pelo botão **Escolher fundo** do resumo.
 - O estado do **artefato do Claude** deixa de ser a fonte de verdade: depois que você começa a usar o servidor, os novos registros ficam no banco dele.

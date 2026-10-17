@@ -96,6 +96,19 @@ function createApp(cfg) {
     }
   }
 
+  // Fundo da imagem de compartilhamento (arquivo único em DATA_DIR, fora do Git).
+  const BG_EXTS = ['jpg', 'png', 'webp', 'gif'];
+  function findShareBg() {
+    for (const ext of BG_EXTS) {
+      const file = path.join(cfg.dataDir, 'share-bg.' + ext);
+      if (fs.existsSync(file)) return { file, ext, version: Math.floor(fs.statSync(file).mtimeMs) };
+    }
+    return null;
+  }
+  function clearShareBg() {
+    for (const ext of BG_EXTS) { try { fs.unlinkSync(path.join(cfg.dataDir, 'share-bg.' + ext)); } catch (_) { /* não existia */ } }
+  }
+
   const htmlCache = {};
   function page(name) {
     if (!htmlCache[name] || process.env.NODE_ENV !== 'production') {
@@ -123,7 +136,7 @@ function createApp(cfg) {
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Content-Security-Policy': [
         "default-src 'self'",
-        "script-src 'self' https://cdnjs.cloudflare.com",
+        "script-src 'self'",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src https://fonts.gstatic.com",
         "img-src 'self' data: blob:",
@@ -218,7 +231,22 @@ function createApp(cfg) {
 
     if (!currentSession(req)) return json(req, res, 401, { error: 'Sessão expirada. Entre novamente.' });
 
-    if (p === '/api/me' && method === 'GET') return json(req, res, 200, { user: cfg.username, covers: !!tmdb });
+    if (p === '/api/me' && method === 'GET') {
+      const bg = findShareBg();
+      return json(req, res, 200, { user: cfg.username, covers: !!tmdb, shareBg: bg ? bg.version : null });
+    }
+
+    if (p === '/api/share-bg') {
+      if (method === 'PUT') {
+        const buf = await readBody(req, 12 * 1024 * 1024);
+        const kind = db.sniffImage(buf);
+        if (!kind) return json(req, res, 415, { error: 'Envie uma imagem JPG, PNG, WEBP ou GIF.' });
+        clearShareBg();
+        fs.writeFileSync(path.join(cfg.dataDir, 'share-bg.' + kind.ext), buf);
+        return json(req, res, 200, { shareBg: findShareBg().version });
+      }
+      if (method === 'DELETE') { clearShareBg(); return json(req, res, 200, { shareBg: null }); }
+    }
 
     if (p === '/api/covers/sync') {
       if (!tmdb) return json(req, res, 503, { error: 'Busca de capas desativada. Defina TMDB_API_KEY no servidor.' });
@@ -304,6 +332,11 @@ function createApp(cfg) {
         return send(req, res, 200, page('index.html'), { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store' });
       }
       if (p === '/app.js') return serveFile(req, res, path.join(PUBLIC_DIR, 'app.js'), MIME['.js'], 'no-cache');
+      if (p === '/share-bg') {
+        const bg = findShareBg();
+        if (!bg) return send(req, res, 404, 'Não encontrado', { 'Content-Type': 'text/plain; charset=utf-8' });
+        return serveFile(req, res, bg.file, { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' }[bg.ext], 'private, max-age=31536000, immutable');
+      }
       if (p.startsWith('/covers/')) {
         const c = store.coverFile(p.slice('/covers/'.length));
         if (!c) return send(req, res, 404, 'Não encontrado', { 'Content-Type': 'text/plain; charset=utf-8' });
