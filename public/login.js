@@ -1,4 +1,14 @@
 (function () {
+  // Logo personalizada (se houver): troca a marca padrão e o ícone da aba.
+  var probe = new Image();
+  probe.onload = function () {
+    document.getElementById('login-logo-img').src = '/logo';
+    document.getElementById('login-logo').classList.remove('hidden');
+    document.getElementById('login-brand-default').classList.add('hidden');
+    var ic = document.querySelector('link[rel="icon"]');
+    if (ic) { ic.type = 'image/png'; ic.href = '/logo'; }
+  };
+  probe.src = '/logo';
   var form = document.getElementById('login-form');
   var err = document.getElementById('login-error');
   var btn = document.getElementById('login-btn');

@@ -1,4 +1,4 @@
-# Meu Arquivo — imagem sem dependências externas (node:sqlite vem embutido no Node 22).
+# WAndCine — imagem sem dependências externas (node:sqlite vem embutido no Node 22).
 FROM node:22-slim
 ENV NODE_ENV=production \
     PORT=8080 \

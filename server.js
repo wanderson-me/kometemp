@@ -1,5 +1,5 @@
 'use strict';
-// Meu Arquivo — servidor (Node.js puro + SQLite embutido, sem dependências).
+// WAndCine — servidor (Node.js puro + SQLite embutido, sem dependências).
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -109,6 +109,19 @@ function createApp(cfg) {
   function clearShareBg() {
     for (const ext of BG_EXTS) { try { fs.unlinkSync(path.join(cfg.dataDir, 'share-bg.' + ext)); } catch (_) { /* não existia */ } }
   }
+
+  // Logo do app (arquivo único em DATA_DIR, fora do Git). É pública: aparece também na tela de login.
+  function findLogo() {
+    for (const ext of BG_EXTS) {
+      const file = path.join(cfg.dataDir, 'logo.' + ext);
+      if (fs.existsSync(file)) return { file, ext, version: Math.floor(fs.statSync(file).mtimeMs) };
+    }
+    return null;
+  }
+  function clearLogo() {
+    for (const ext of BG_EXTS) { try { fs.unlinkSync(path.join(cfg.dataDir, 'logo.' + ext)); } catch (_) { /* não existia */ } }
+  }
+  const IMG_MIME = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };
 
   const htmlCache = {};
   function page(name) {
@@ -234,7 +247,8 @@ function createApp(cfg) {
 
     if (p === '/api/me' && method === 'GET') {
       const bg = findShareBg();
-      return json(req, res, 200, { user: cfg.username, covers: !!tmdb, shareBg: bg ? bg.version : null });
+      const logo = findLogo();
+      return json(req, res, 200, { user: cfg.username, covers: !!tmdb, shareBg: bg ? bg.version : null, logo: logo ? logo.version : null });
     }
 
     if (p === '/api/share-bg') {
@@ -247,6 +261,18 @@ function createApp(cfg) {
         return json(req, res, 200, { shareBg: findShareBg().version });
       }
       if (method === 'DELETE') { clearShareBg(); return json(req, res, 200, { shareBg: null }); }
+    }
+
+    if (p === '/api/logo') {
+      if (method === 'PUT') {
+        const buf = await readBody(req, 6 * 1024 * 1024);
+        const kind = db.sniffImage(buf);
+        if (!kind) return json(req, res, 415, { error: 'Envie uma imagem JPG, PNG, WEBP ou GIF.' });
+        clearLogo();
+        fs.writeFileSync(path.join(cfg.dataDir, 'logo.' + kind.ext), buf);
+        return json(req, res, 200, { logo: findLogo().version });
+      }
+      if (method === 'DELETE') { clearLogo(); return json(req, res, 200, { logo: null }); }
     }
 
     if (p === '/api/covers/sync') {
@@ -326,6 +352,11 @@ function createApp(cfg) {
         if (logged) return send(req, res, 302, '', { Location: '/' });
         return send(req, res, 200, page('login.html'), { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store' });
       }
+      if (p === '/logo') {
+        const lg = findLogo();
+        if (!lg) return send(req, res, 404, 'Não encontrado', { 'Content-Type': 'text/plain; charset=utf-8' });
+        return serveFile(req, res, lg.file, IMG_MIME[lg.ext], url.searchParams.has('v') ? 'public, max-age=31536000, immutable' : 'no-cache');
+      }
       if (PUBLIC_FILES.has(p)) {
         return serveFile(req, res, path.join(PUBLIC_DIR, p), MIME[path.extname(p)], 'no-cache');
       }
@@ -343,7 +374,7 @@ function createApp(cfg) {
       if (p === '/share-bg') {
         const bg = findShareBg();
         if (!bg) return send(req, res, 404, 'Não encontrado', { 'Content-Type': 'text/plain; charset=utf-8' });
-        return serveFile(req, res, bg.file, { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' }[bg.ext], 'private, max-age=31536000, immutable');
+        return serveFile(req, res, bg.file, IMG_MIME[bg.ext], 'private, max-age=31536000, immutable');
       }
       if (p.startsWith('/covers/')) {
         const c = store.coverFile(p.slice('/covers/'.length));
@@ -374,7 +405,7 @@ if (require.main === module) {
   const cfg = loadConfig();
   const { server } = createApp(cfg);
   server.listen(cfg.port, '0.0.0.0', () => {
-    console.log('Meu Arquivo rodando em http://localhost:' + cfg.port + ' (usuário: ' + cfg.username + ')');
+    console.log('WAndCine rodando em http://localhost:' + cfg.port + ' (usuário: ' + cfg.username + ')');
   });
   const stop = () => server.close(() => process.exit(0));
   process.on('SIGTERM', stop);

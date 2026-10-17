@@ -1,19 +1,19 @@
 (function () {
   var STATUS = {
-    game: ['Jogando', 'Completo', 'Abandonado'],
     series: ['Assistindo', 'Completa']
   };
   var LABELS = {
-    game: { name: 'jogo', plural: 'jogos', extraLabel: 'Plataforma / console' },
     movie: { name: 'filme', plural: 'filmes', extraLabel: 'Ano de lançamento' },
     series: { name: 'série', plural: 'séries', extraLabel: 'Temporadas assistidas' }
   };
 
   var entries = [];
+  // O app é só de filmes e séries; registros antigos de jogos ficam guardados no banco, mas não aparecem.
+  function visible(list) { return list.filter(function (e) { return e.type === 'movie' || e.type === 'series'; }); }
   var shareBgVersion = null;
 
   var state = {
-    activeTab: 'game',
+    activeTab: 'movie',
     search: '',
     sort: 'recent',
     editingId: null,
@@ -115,7 +115,7 @@
     document.querySelectorAll('.tab').forEach(function (btn) {
       btn.classList.toggle('active', btn.dataset.type === state.activeTab);
     });
-    ['game', 'movie', 'series'].forEach(function (t) {
+    ['movie', 'series'].forEach(function (t) {
       var c = entries.filter(function (e) { return e.type === t; }).length;
       document.getElementById('count-' + t).textContent = c ? '· ' + c : '';
     });
@@ -135,10 +135,7 @@
     var rated = list.filter(function (e) { return e.rating > 0; });
     var avg = rated.length ? (rated.reduce(function (s, e) { return s + e.rating; }, 0) / rated.length).toFixed(1) : '—';
     var extra = '';
-    if (state.activeTab === 'game') {
-      var completos = list.filter(function (e) { return e.status === 'Completo'; }).length;
-      extra = '<div><b>' + completos + '</b>completados</div>';
-    } else if (state.activeTab === 'movie') {
+    if (state.activeTab === 'movie') {
       var totalMinutes = list.reduce(function (s, e) { return s + (parseInt(e.duration, 10) || 0); }, 0);
       if (totalMinutes > 0) {
         extra += '<div><b>' + formatDuration(totalMinutes) + '</b>assistidos</div>';
@@ -161,12 +158,6 @@
   }
 
   function metaLine(e) {
-    if (e.type === 'game') {
-      var bits = [];
-      if (e.platform) bits.push(escapeHtml(e.platform));
-      if (e.date) bits.push('concluído em ' + formatDate(e.date));
-      return bits.join(' · ');
-    }
     if (e.type === 'movie') {
       var bits2 = [];
       if (e.year) bits2.push(e.year);
@@ -196,8 +187,7 @@
   function posterPlaceholder(e) {
     var palettes = {
       movie: ['#c1542e', '#7a3119'],
-      series: ['#b9842a', '#6f5215'],
-      game: ['#4f7a52', '#2d472f']
+      series: ['#b9842a', '#6f5215']
     };
     var base = palettes[e.type] || palettes.movie;
     var angle = (hashStr(e.title) % 140) + 20;
@@ -509,7 +499,7 @@
       var sw = w / sc, sh = h / sc;
       ctx.drawImage(img, (img.width - sw) / 2, (img.height - sh) / 2, sw, sh, x, y, w, h);
     } else {
-      var pal = { movie: ['#c1542e', '#7a3119'], series: ['#b9842a', '#6f5215'], game: ['#4f7a52', '#2d472f'] }[e.type] || ['#c1542e', '#7a3119'];
+      var pal = { movie: ['#c1542e', '#7a3119'], series: ['#b9842a', '#6f5215'] }[e.type] || ['#c1542e', '#7a3119'];
       var th = ((hashStr(e.title) % 140) + 20) * Math.PI / 180;
       var vx = Math.sin(th), vy = -Math.cos(th);
       var len = Math.abs(w * vx) + Math.abs(h * vy);
@@ -813,6 +803,57 @@
     input.click();
   }
 
+  // ---- Logo ----
+  function applyLogo(version) {
+    var on = !!version;
+    document.getElementById('brand-logo').classList.toggle('hidden', !on);
+    document.getElementById('brand-default').classList.toggle('hidden', on);
+    document.getElementById('logo-btn').textContent = on ? 'Trocar logo' : 'Definir logo';
+    var ic = document.querySelector('link[rel="icon"]');
+    if (on) {
+      document.getElementById('brand-logo-img').src = '/logo?v=' + version;
+      if (ic) { ic.type = 'image/png'; ic.href = '/logo?v=' + version; }
+    } else if (ic) { ic.type = 'image/svg+xml'; ic.href = '/favicon.svg'; }
+  }
+
+  // Reduz a imagem para um quadrado de 512 px (PNG) antes de enviar: carrega rápido e vale também como ícone da aba.
+  function squareLogoBlob(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        var side = Math.min(img.width, img.height), SIZE = 512;
+        var c = document.createElement('canvas');
+        c.width = SIZE; c.height = SIZE;
+        var ctx = c.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, SIZE, SIZE);
+        URL.revokeObjectURL(url);
+        c.toBlob(function (b) { b ? resolve(b) : reject(new Error('Não foi possível ler a imagem.')); }, 'image/png');
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Não foi possível ler a imagem.')); };
+      img.src = url;
+    });
+  }
+
+  function pickLogo() {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.addEventListener('change', function () {
+      var f = input.files && input.files[0];
+      if (!f) return;
+      showToast('Enviando logo…');
+      squareLogoBlob(f).then(function (blob) {
+        return api('PUT', '/api/logo', undefined, blob);
+      }).then(function (r) {
+        applyLogo(r.logo);
+        showToast('Logo atualizada.');
+      }).catch(function (err) { showToast('Não foi possível enviar a logo: ' + err.message); });
+    });
+    input.click();
+  }
+
   function removeShareBg() {
     api('DELETE', '/api/share-bg').then(function () {
       shareBgVersion = null;
@@ -847,14 +888,7 @@
       starsHtml += '<button type="button" data-val="' + i + '" class="' + (i <= rating ? 'filled' : (i - 0.5 === rating ? 'half' : '')) + '" title="Clique na metade esquerda para meia estrela">★</button>';
     }
     var extraField = '';
-    if (type === 'game') {
-      extraField =
-        '<div class="form-field"><label>Plataforma / console</label>' +
-        '<input type="text" name="platform" value="' + escapeHtml(existing.platform || '') + '" placeholder="Ex: PS5, Switch, PC"></div>' +
-        '<div class="form-field"><label>Status</label><select name="status">' +
-        STATUS.game.map(function (s) { return '<option ' + (existing.status === s ? 'selected' : '') + '>' + s + '</option>'; }).join('') +
-        '</select></div>';
-    } else if (type === 'movie') {
+    if (type === 'movie') {
       extraField =
         '<div class="form-field"><label>Ano de lançamento</label>' +
         '<input type="number" name="year" value="' + escapeHtml(existing.year || '') + '" placeholder="Ex: 1999"></div>' +
@@ -892,7 +926,7 @@
         '<div class="form-field"><label>Título</label>' +
         '<input type="text" name="title" value="' + escapeHtml(existing.title || '') + '" placeholder="Nome do ' + LABELS[type].name + '" required></div>' +
         extraField +
-        '<div class="form-field"><label>' + (type === 'movie' ? 'Assistido em' : (type === 'game' ? 'Concluído em' : 'Atualizado em')) + '</label>' +
+        '<div class="form-field"><label>' + (type === 'movie' ? 'Assistido em' : 'Atualizado em') + '</label>' +
         '<input type="date" name="date" value="' + escapeHtml(existing.date || '') + '"></div>' +
         '<div class="form-field"><label>Nota</label><div class="star-input" id="star-input">' + starsHtml + '</div>' +
         '<input type="hidden" name="rating" value="' + rating + '"></div>' +
@@ -1013,10 +1047,7 @@
       notes: (fd.get('notes') || '').toString().trim(),
       imdbUrl: normalizeImdbInput(fd.get('imdbUrl'))
     };
-    if (type === 'game') {
-      payload.platform = (fd.get('platform') || '').toString().trim();
-      payload.status = fd.get('status');
-    } else if (type === 'movie') {
+    if (type === 'movie') {
       payload.year = (fd.get('year') || '').toString().trim();
       payload.duration = parseInt(fd.get('duration'), 10) || 0;
       payload.genres = (fd.get('genres') || '').toString().split(',').map(function (g) { return g.trim(); }).filter(Boolean);
@@ -1137,6 +1168,7 @@
     }
   });
 
+  document.getElementById('logo-btn').addEventListener('click', pickLogo);
   document.getElementById('logout-btn').addEventListener('click', function () {
     fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).finally(function () { location.replace('/login'); });
   });
@@ -1164,7 +1196,7 @@
         return;
       }
       api('GET', '/api/entries').then(function (list) {
-        entries = list;
+        entries = visible(list);
         render();
         finish(st.total === 0 ? 'Nenhuma capa pendente.' :
           st.found + ' capas encontradas' + (st.missing ? ', ' + st.missing + ' sem pôster no TMDB' : '') + (st.failed ? ', ' + st.failed + ' com erro' : '') + '.');
@@ -1197,7 +1229,7 @@
         ].filter(Boolean).join(', ') + ')</li>');
       }
       el.innerHTML = '<h3>Importação do IMDb concluída</h3><ul>' + li.join('') + '</ul>' +
-        '<p>Agora o catálogo tem <b>' + n('movie') + ' filmes</b>, <b>' + n('series') + ' séries</b> e <b>' + n('game') + ' jogos</b>.</p>' +
+        '<p>Agora o catálogo tem <b>' + n('movie') + ' filmes</b> e <b>' + n('series') + ' séries</b>.</p>' +
         '<button type="button" class="btn-secondary" id="import-close">Fechar</button>';
     }
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1220,7 +1252,7 @@
       btn.textContent = 'Importando…';
       api('POST', '/api/import/imdb', undefined, new Blob([f], { type: 'text/csv' })).then(function (r) {
         return api('GET', '/api/entries').then(function (list) {
-          entries = list;
+          entries = visible(list);
           render();
           showImportResult(r, list);
           if (coversEnabled && r.created) syncCovers();
@@ -1236,6 +1268,7 @@
   });
   api('GET', '/api/me').then(function (me) {
     shareBgVersion = me.shareBg || null;
+    applyLogo(me.logo || null);
     renderMovieRecap();
     coversEnabled = !!me.covers;
     if (me.covers) {
@@ -1246,7 +1279,7 @@
 
   renderTabs();
   api('GET', '/api/entries').then(function (list) {
-    entries = list;
+    entries = visible(list);
     render();
   }).catch(function (err) {
     var emptyEl = document.getElementById('empty-state');

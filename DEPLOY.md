@@ -1,4 +1,4 @@
-# Publicar o Meu Arquivo na nuvem
+# Publicar o WAndCine na nuvem
 
 O app é um servidor Node.js (22.13 ou mais novo) com banco SQLite. Não tem dependências para instalar. O que ele precisa da hospedagem:
 

@@ -200,3 +200,33 @@ test('fundo da imagem de compartilhamento: envia, serve só com login e remove',
     fs.rmSync(dir2, { recursive: true, force: true });
   }
 });
+
+test('logo: envia (só logado), é pública para a tela de login e pode ser removida', async () => {
+  const dir3 = fs.mkdtempSync(path.join(os.tmpdir(), 'ma-logo-'));
+  const app = createApp(loadConfig({ DATA_DIR: dir3, APP_USERNAME: 'eu', APP_PASSWORD: 'senha-longa-123', AUTO_SEED: '0' }));
+  await new Promise((r) => app.server.listen(0, '127.0.0.1', r));
+  const b = 'http://127.0.0.1:' + app.server.address().port;
+  const lg = await fetch(b + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'eu', password: 'senha-longa-123' }) });
+  const ck = lg.headers.get('set-cookie').split(';')[0];
+  try {
+    assert.equal((await fetch(b + '/logo')).status, 404);                                   // ainda não há logo
+    assert.equal((await (await fetch(b + '/api/me', { headers: { cookie: ck } })).json()).logo, null);
+    assert.equal((await fetch(b + '/api/logo', { method: 'PUT', body: PNG })).status, 401); // exige login
+    assert.equal((await fetch(b + '/api/logo', { method: 'PUT', headers: { cookie: ck }, body: Buffer.from('nada') })).status, 415);
+
+    const ok = await fetch(b + '/api/logo', { method: 'PUT', headers: { cookie: ck }, body: PNG });
+    assert.equal(ok.status, 200);
+    const v = (await ok.json()).logo;
+    assert.ok(v > 0);
+    const pub = await fetch(b + '/logo?v=' + v);                                            // sem cookie: a tela de login precisa ver
+    assert.equal(pub.status, 200);
+    assert.equal(pub.headers.get('content-type'), 'image/png');
+    assert.equal((await (await fetch(b + '/api/me', { headers: { cookie: ck } })).json()).logo, v);
+
+    await fetch(b + '/api/logo', { method: 'DELETE', headers: { cookie: ck } });
+    assert.equal((await fetch(b + '/logo')).status, 404);
+  } finally {
+    await new Promise((r) => app.server.close(r));
+    fs.rmSync(dir3, { recursive: true, force: true });
+  }
+});

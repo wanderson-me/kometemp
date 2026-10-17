@@ -1,7 +1,7 @@
 {
   "name": "meu-arquivo",
   "version": "1.0.0",
-  "description": "Meu Arquivo — catálogo pessoal de jogos, filmes e séries (Node.js + SQLite, login de usuário único)",
+  "description": "WAndCine — catálogo pessoal de filmes e séries (Node.js + SQLite, login de usuário único)",
   "private": true,
   "type": "commonjs",
   "main": "server.js",

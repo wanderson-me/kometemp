@@ -98,8 +98,6 @@
   .tab:hover { background: rgba(255,255,255,0.055); color: var(--sidebar-text); }
   .nav-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.45; flex-shrink: 0; }
   .tab.active { background: rgba(255,255,255,0.08); color: var(--sidebar-text); }
-  .tab--game.active { border-left-color: var(--game); }
-  .tab--game.active .nav-dot { background: var(--game); opacity: 1; }
   .tab--movie.active { border-left-color: var(--movie); }
   .tab--movie.active .nav-dot { background: var(--movie); opacity: 1; }
   .tab--series.active { border-left-color: var(--series); }
@@ -515,7 +513,6 @@
     .sidebar-foot { display: none; }
     .side-nav { flex-direction: row; overflow-x: auto; gap: 6px; }
     .tab { white-space: nowrap; border-left: none; border-bottom: 3px solid transparent; }
-    .tab--game.active { border-bottom-color: var(--game); border-left-color: transparent; }
     .tab--movie.active { border-bottom-color: var(--movie); border-left-color: transparent; }
     .tab--series.active { border-bottom-color: var(--series); border-left-color: transparent; }
     .main { padding: 22px 18px 70px; }
@@ -596,8 +593,22 @@
 @media (max-width: 760px) { .tmdb-note { display: none; } }
 
 /* ---- Resultado da importação ---- */
-.import-result { background: var(--paper-raised); border: 1px solid var(--line); border-left: 4px solid var(--game); border-radius: var(--radius-md); padding: 16px 18px; margin-bottom: 22px; font-size: 0.9rem; line-height: 1.55; }
+.import-result { background: var(--paper-raised); border: 1px solid var(--line); border-left: 4px solid var(--series); border-radius: var(--radius-md); padding: 16px 18px; margin-bottom: 22px; font-size: 0.9rem; line-height: 1.55; }
 .import-result h3 { font-family: var(--font-display); font-size: 1.2rem; font-weight: normal; letter-spacing: 0.02em; margin: 0 0 6px; }
 .import-result ul { margin: 0 0 10px; padding-left: 18px; color: var(--ink-soft); }
 .import-result li b { color: var(--ink); }
 .import-result.error { border-left-color: var(--movie); }
+
+/* ---- Logo ---- */
+.brand-logo { display: flex; flex-direction: column; align-items: center; gap: 0; text-decoration: none; color: var(--sidebar-text); }
+.brand-logo-disc { display: block; width: 176px; height: 176px; border-radius: 50%; overflow: hidden; background: #18110c; box-shadow: 0 0 0 1px rgba(243,236,224,0.08), 0 14px 30px -14px rgba(0,0,0,0.7); flex: 0 0 auto; }
+.brand-logo-disc img { display: block; width: 122%; height: 122%; max-width: none; margin: -9.3% 0 0 -10.6%; }
+.brand-logo-name { display: none; font-family: var(--font-display); font-size: 1.45rem; letter-spacing: 0.02em; }
+.login-logo { display: flex; justify-content: center; margin-bottom: 4px; }
+.login-logo .brand-logo-disc { width: 168px; height: 168px; }
+@media (max-width: 760px) {
+  .brand-logo { flex-direction: row; gap: 10px; flex: 1 1 auto; justify-content: flex-start; }
+  .brand-logo-disc { width: 44px; height: 44px; }
+  .brand-logo-name { display: block; }
+  .foot-link--logo { display: none; }
+}

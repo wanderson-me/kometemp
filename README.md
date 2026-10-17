@@ -1,6 +1,8 @@
-# Meu Arquivo
+# WAndCine
 
-Catálogo pessoal de jogos de console, filmes e séries, com banco de dados e login.
+Catálogo pessoal de filmes e séries, com banco de dados e login.
+
+A logo não fica no repositório: depois de entrar, use **Trocar logo** na barra lateral. O arquivo é guardado na pasta de dados do servidor e aparece também na tela de login.
 
 - **Back-end:** Node.js puro + SQLite (`node:sqlite`, embutido no Node 22.13+). Sem dependências npm.
 - **Acesso:** usuário único, senha com scrypt, sessão por cookie assinado.
