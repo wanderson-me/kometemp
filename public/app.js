@@ -967,16 +967,21 @@
     var panel = document.getElementById('form-panel');
     var type = existing ? existing.type : state.activeTab;
     panel.innerHTML =
-      '<h2>' + (existing ? 'Editar ' : 'Adicionar ') + LABELS[type].name + '</h2>' +
+      '<div class="modal-head">' +
+        '<h2 id="modal-title">' + (existing ? 'Editar ' : 'Adicionar ') + LABELS[type].name + '</h2>' +
+        '<button type="button" class="modal-x" id="modal-close" aria-label="Fechar">✕</button>' +
+      '</div>' +
       '<form id="entry-form">' +
         fieldForType(type, existing) +
+        '<p class="form-error hidden" id="form-error" role="alert"></p>' +
         '<div class="form-actions">' +
           '<button type="button" class="btn-secondary" id="cancel-form">Cancelar</button>' +
           '<button type="submit" class="btn-primary">Salvar</button>' +
         '</div>' +
       '</form>';
-    panel.classList.remove('hidden');
     panel.dataset.type = type;
+    if (!panel.open) panel.showModal();
+    panel.scrollTop = 0;
 
     panel.querySelectorAll('.star-input button').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -1016,21 +1021,33 @@
     });
 
     document.getElementById('cancel-form').addEventListener('click', closeForm);
+    document.getElementById('modal-close').addEventListener('click', closeForm);
     document.getElementById('entry-form').addEventListener('submit', function (ev) {
       ev.preventDefault();
       saveForm(type);
     });
 
-    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Novo registro: já cursor no título. Edição: sem teclado aberto no celular.
+    if (!existing) {
+      var titleInput = panel.querySelector('input[name="title"]');
+      if (titleInput) titleInput.focus();
+    }
   }
 
   function closeForm() {
+    var panel = document.getElementById('form-panel');
+    if (panel.open) panel.close();
     state.formOpen = false;
     state.editingId = null;
-    var panel = document.getElementById('form-panel');
-    panel.classList.add('hidden');
     panel.innerHTML = '';
   }
+
+  // Esc (ou qualquer fechamento do diálogo) também zera o estado do formulário.
+  document.getElementById('form-panel').addEventListener('close', function () {
+    state.formOpen = false;
+    state.editingId = null;
+    this.innerHTML = '';
+  });
 
   function normalizeImdbInput(raw) {
     raw = (raw || '').toString().trim();
@@ -1102,7 +1119,10 @@
       showToast('Salvo.');
     } catch (err) {
       if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Salvar'; }
-      showToast('Não foi possível salvar: ' + err.message);
+      // O toast fica atrás do diálogo; o erro aparece dentro dele.
+      var fe = document.getElementById('form-error');
+      if (fe) { fe.textContent = 'Não foi possível salvar: ' + err.message; fe.classList.remove('hidden'); }
+      else showToast('Não foi possível salvar: ' + err.message);
     }
   }
 
@@ -1187,7 +1207,6 @@
   });
 
   document.getElementById('add-btn').addEventListener('click', function () {
-    if (state.formOpen && !state.editingId) { closeForm(); return; }
     openForm(null);
   });
 
