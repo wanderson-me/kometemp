@@ -99,7 +99,7 @@ A logo é enviada pela própria interface (**Trocar logo**) e vira o ícone do a
 
 Regras da importação (pode repetir quantas vezes quiser, sem duplicar):
 - O filme/série é reconhecido pelo código `tt...`. Se já existe, o app atualiza **nota, gêneros, duração e ano** e mantém seu título, data, anotações e capa.
-- Nota do IMDb (1–10) vira estrelas (1–5): 1–2 → 1, 3–4 → 2, 5–6 → 3, 7–8 → 4, 9–10 → 5.
+- A nota do IMDb (1–10) entra igual, sem conversão.
 - Séries entram como séries; episódios e jogos do CSV são ignorados.
 - Gêneros são traduzidos (Crime → Policial, Thriller → Suspense etc.). A data da avaliação **não** vira "assistido em", para não bagunçar o resumo do mês.
 - Com a chave do TMDB configurada, as capas dos itens novos são buscadas automaticamente depois da importação.

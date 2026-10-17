@@ -262,7 +262,8 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .recap-spotlight-stars { color: #e8c267; font-size: 0.95rem; margin-bottom: 4px; }
+  .recap-spotlight-stars { color: #e8c267; font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; }
+  .recap-spotlight-stars small { color: rgba(255,255,255,0.6); font-weight: 400; font-size: 0.8rem; margin-left: 2px; }
   .recap-spotlight-genre { font-size: 0.78rem; opacity: 0.65; }
   .recap-list { display: flex; flex-direction: column; gap: 8px; }
   .recap-item {
@@ -366,24 +367,18 @@
     font-size: 0.92rem;
   }
   .form-field textarea { resize: vertical; min-height: 60px; }
-  .star-input { display: flex; gap: 4px; }
+  .star-input { display: flex; gap: 1px; flex-wrap: wrap; }
   .star-input button {
     background: none;
     border: none;
-    font-size: 1.4rem;
+    font-size: 1.5rem;
     cursor: pointer;
     color: var(--line);
-    padding: 0;
+    padding: 2px 1px;
     line-height: 1;
   }
-  .star-input button { position: relative; }
   .star-input button.filled { color: var(--series-deep); }
-  .star-input button.half::after {
-    content: '★'; position: absolute; left: 0; top: 0; width: 50%; overflow: hidden; color: var(--series-deep);
-  }
-  /* Meia estrela nas exibições: estrela vazia com a metade esquerda preenchida */
-  .star-half { position: relative; display: inline-block; }
-  .star-half::after { content: '★'; position: absolute; left: 0; top: 0; width: 50%; overflow: hidden; }
+  .rating-readout { margin-left: 6px; font-weight: 700; color: var(--ink); }
   .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
   .btn-secondary {
     background: transparent;
@@ -622,4 +617,10 @@ button, a, summary { -webkit-tap-highlight-color: transparent; }
 }
 @media (display-mode: standalone) {
   body { overscroll-behavior-y: none; }
+}
+
+/* ---- Campo de nota (10 estrelas) ---- */
+@media (min-width: 761px) {
+  .form-field--rating { grid-column: span 2; }
+  .star-input { flex-wrap: nowrap; }
 }

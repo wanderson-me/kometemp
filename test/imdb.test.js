@@ -42,22 +42,22 @@ test('buildImport: novos, existentes (casados pelo tt), ignorados e nota 1-10 ->
   assert.equal(old.title, 'Título que eu escolhi');   // mantém o seu título
   assert.equal(old.notes, 'minha nota');
   assert.equal(old.date, '2024-05-01');
-  assert.equal(old.rating, 5);                        // 10 -> 5
+  assert.equal(old.rating, 10);                       // 10 -> 10 (sem conversão)
   assert.equal(old.duration, 142);
   assert.equal(old.year, '1994');
   assert.deepEqual(old.genres, ['Drama']);
 
   const bat = items.find((i) => i.imdbUrl.includes('tt0468569'));
-  assert.equal(bat.rating, 4.5);                      // 9 -> 4,5
+  assert.equal(bat.rating, 9);                        // 9 -> 9
   assert.deepEqual(bat.genres, ['Ação', 'Policial', 'Drama']);
   assert.equal(bat.date, undefined);                  // não usa a data da avaliação
 
   const bb = items.find((i) => i.imdbUrl.includes('tt0903747'));
   assert.equal(bb.type, 'series');
-  assert.equal(bb.rating, 4);                         // 8 -> 4
+  assert.equal(bb.rating, 8);                         // 8 -> 8
   assert.equal(bb.duration, undefined);               // séries não recebem duração do CSV
 
-  assert.equal(items.find((i) => i.imdbUrl.includes('tt1000001')).rating, 0.5); // 1 -> 0,5
+  assert.equal(items.find((i) => i.imdbUrl.includes('tt1000001')).rating, 1); // 1 -> 1
 });
 
 test('CSV que não é do IMDb é recusado com mensagem clara', () => {

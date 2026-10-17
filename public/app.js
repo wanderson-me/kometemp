@@ -96,20 +96,10 @@
     });
   }
 
-  // Nota em estrelas, com meia estrela (3,5). Aceita número ou texto.
+  // Nota de 1 a 10, como no IMDb.
   function num(r) { var n = parseFloat(r); return isFinite(n) ? n : 0; }
-  function formatRating(r) { return String(num(r)).replace('.', ','); }
-
-  function starsMarkup(rating) {
-    rating = num(rating);
-    var out = '';
-    for (var i = 1; i <= 5; i++) {
-      if (i <= rating) out += '<span>★</span>';
-      else if (i - 0.5 === rating) out += '<span class="star-half empty-star">☆</span>';
-      else out += '<span class="empty-star">☆</span>';
-    }
-    return out;
-  }
+  function formatRating(r) { return String(num(r)); }
+  function formatAvg(n) { return n.toFixed(1).replace('.', ','); }
 
   function renderTabs() {
     document.querySelectorAll('.tab').forEach(function (btn) {
@@ -133,7 +123,7 @@
     var list = entries.filter(function (e) { return e.type === state.activeTab; });
     var total = list.length;
     var rated = list.filter(function (e) { return e.rating > 0; });
-    var avg = rated.length ? (rated.reduce(function (s, e) { return s + e.rating; }, 0) / rated.length).toFixed(1) : '—';
+    var avg = rated.length ? formatAvg(rated.reduce(function (s, e) { return s + e.rating; }, 0) / rated.length) : '—';
     var extra = '';
     if (state.activeTab === 'movie') {
       var totalMinutes = list.reduce(function (s, e) { return s + (parseInt(e.duration, 10) || 0); }, 0);
@@ -353,7 +343,7 @@
           '<div class="recap-spotlight-body">' +
             '<div class="recap-spotlight-label">⭐ Filme do mês</div>' +
             '<div class="recap-spotlight-title">' + escapeHtml(tm.title) + '</div>' +
-            '<div class="recap-spotlight-stars">' + starsMarkup(tm.rating || 0) + '</div>' +
+            '<div class="recap-spotlight-stars">★ ' + formatRating(tm.rating) + '<small>/10</small></div>' +
             (tmGenres ? '<div class="recap-spotlight-genre">' + escapeHtml(tmGenres) + '</div>' : '') +
           '</div>' +
         '</div>';
@@ -390,7 +380,7 @@
     lines.push(d.totalCount + ' filmes assistidos no total (' + formatDuration(d.totalMinutes) + ')');
     if (d.topMovie) {
       lines.push('');
-      lines.push('⭐ Filme do mês: ' + d.topMovie.title + ' (' + formatRating(d.topMovie.rating) + '/5)');
+      lines.push('⭐ Filme do mês: ' + d.topMovie.title + ' (' + formatRating(d.topMovie.rating) + '/10)');
     }
     lines.push('');
     lines.push('Este mês (' + d.monthMovies.length + '):');
@@ -669,17 +659,15 @@
       t.lines.forEach(function (ln, i) { ctx.fillText(ln, tx, ty + i * t.size * 0.98); });
       var after = ty + (t.lines.length - 1) * t.size * 0.98 + 26;
 
-      var topRating = num(top.rating);
-      for (var s = 1; s <= 5; s++) {
-        var sx = tx + 13 + (s - 1) * 32;
-        drawStar(ctx, sx, after, 12, s <= topRating ? SHARE.STAR : 'rgba(255,255,255,0.2)');
-        if (s - 0.5 === topRating) {
-          ctx.save();
-          ctx.beginPath(); ctx.rect(sx - 14, after - 14, 14, 28); ctx.clip();
-          drawStar(ctx, sx, after, 12, SHARE.STAR);
-          ctx.restore();
-        }
-      }
+      drawStar(ctx, tx + 14, after, 14, SHARE.STAR);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 26px ' + SHARE.BODY;
+      var scoreTxt = formatRating(top.rating);
+      ctx.fillText(scoreTxt, tx + 36, after + 9);
+      var scoreW = ctx.measureText(scoreTxt).width;
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.font = '400 18px ' + SHARE.BODY;
+      ctx.fillText('/10', tx + 36 + scoreW + 3, after + 9);
       var gtxt = (top.genres && top.genres.length) ? top.genres.join(', ') : '';
       if (gtxt) {
         var gl = fitText(ctx, gtxt, SHARE.BODY, '400', [18, 16], tw, 2);
@@ -882,10 +870,10 @@
 
   function fieldForType(type, existing) {
     existing = existing || {};
-    var rating = num(existing.rating);
+    var rating = Math.round(num(existing.rating));
     var starsHtml = '';
-    for (var i = 1; i <= 5; i++) {
-      starsHtml += '<button type="button" data-val="' + i + '" class="' + (i <= rating ? 'filled' : (i - 0.5 === rating ? 'half' : '')) + '" title="Clique na metade esquerda para meia estrela">★</button>';
+    for (var i = 1; i <= 10; i++) {
+      starsHtml += '<button type="button" data-val="' + i + '" class="' + (i <= rating ? 'filled' : '') + '" title="Nota ' + i + '" aria-label="Nota ' + i + '">★</button>';
     }
     var extraField = '';
     if (type === 'movie') {
@@ -928,7 +916,7 @@
         extraField +
         '<div class="form-field"><label>' + (type === 'movie' ? 'Assistido em' : 'Atualizado em') + '</label>' +
         '<input type="date" name="date" value="' + escapeHtml(existing.date || '') + '"></div>' +
-        '<div class="form-field"><label>Nota</label><div class="star-input" id="star-input">' + starsHtml + '</div>' +
+        '<div class="form-field form-field--rating"><label>Nota <span class="rating-readout" id="rating-readout">' + (rating ? rating + '/10' : 'sem nota') + '</span></label><div class="star-input" id="star-input">' + starsHtml + '</div>' +
         '<input type="hidden" name="rating" value="' + rating + '"></div>' +
         imdbFieldHtml +
         coverFieldHtml +
@@ -956,20 +944,16 @@
     panel.dataset.type = type;
 
     panel.querySelectorAll('.star-input button').forEach(function (b) {
-      b.addEventListener('click', function (ev) {
+      b.addEventListener('click', function () {
         var val = parseInt(b.dataset.val, 10);
-        // Metade esquerda da estrela = meia estrela (ex.: 3,5). Clicar de novo na mesma nota a zera.
-        var left = ev.offsetX > 0 && ev.offsetX < b.offsetWidth / 2;
-        var picked = left ? val - 0.5 : val;
         var hidden = panel.querySelector('input[name="rating"]');
-        var current = num(hidden.value);
-        var newVal = (current === picked) ? 0 : picked;
+        // Clicar de novo na nota atual remove a nota.
+        var newVal = (parseInt(hidden.value, 10) === val) ? 0 : val;
         hidden.value = newVal;
         panel.querySelectorAll('.star-input button').forEach(function (bb) {
-          var v = parseInt(bb.dataset.val, 10);
-          bb.classList.toggle('filled', v <= newVal);
-          bb.classList.toggle('half', v - 0.5 === newVal);
+          bb.classList.toggle('filled', parseInt(bb.dataset.val, 10) <= newVal);
         });
+        panel.querySelector('#rating-readout').textContent = newVal ? newVal + '/10' : 'sem nota';
       });
     });
 
@@ -1043,7 +1027,7 @@
       type: type,
       title: title,
       date: fd.get('date') || '',
-      rating: num(fd.get('rating')),
+      rating: parseInt(fd.get('rating'), 10) || 0,
       notes: (fd.get('notes') || '').toString().trim(),
       imdbUrl: normalizeImdbInput(fd.get('imdbUrl'))
     };

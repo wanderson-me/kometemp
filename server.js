@@ -299,7 +299,7 @@ function createApp(cfg) {
     if (p === '/api/import/imdb' && method === 'POST') {
       const csv = (await readBody(req, 20 * 1024 * 1024)).toString('utf8');
       const { items, summary } = imdbImport.buildImport(csv, store.list());
-      const result = store.importMany(items);
+      const result = store.importMany(items, { ratingScale: 10 });
       console.log('[import imdb]', JSON.stringify(Object.assign({}, summary, result)));
       return json(req, res, 200, Object.assign({}, summary, result));
     }

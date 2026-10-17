@@ -90,15 +90,17 @@ test('validação rejeita dados inválidos', async () => {
   assert.equal((await call('POST', '/api/entries', { type: 'movie', title: '  ' })).status, 400);
   assert.equal((await call('POST', '/api/entries', { type: 'movie', title: 'x', date: '01/02/2026' })).status, 400);
   const clamp = await call('POST', '/api/entries', { type: 'movie', title: 'Nota', rating: 99 });
-  assert.equal(clamp.data.rating, 5);
+  assert.equal(clamp.data.rating, 10);
   await call('DELETE', '/api/entries/' + clamp.data.id);
-  const halfStar = await call('POST', '/api/entries', { type: 'movie', title: 'Meia', rating: 3.5 });
-  assert.equal(halfStar.data.rating, 3.5);
-  assert.equal((await call('GET', '/api/entries/' + halfStar.data.id)).data.rating, 3.5);
-  const odd = await call('POST', '/api/entries', { type: 'movie', title: 'Quebrada', rating: 3.8 });
-  assert.equal(odd.data.rating, 4);
-  await call('DELETE', '/api/entries/' + halfStar.data.id);
-  await call('DELETE', '/api/entries/' + odd.data.id);
+  const dec = await call('POST', '/api/entries', { type: 'movie', title: 'Quebrada', rating: 7.6 });
+  assert.equal(dec.data.rating, 8);                       // arredonda para a nota inteira mais próxima
+  const neg = await call('POST', '/api/entries', { type: 'movie', title: 'Negativa', rating: -3 });
+  assert.equal(neg.data.rating, 0);
+  const ok7 = await call('POST', '/api/entries', { type: 'movie', title: 'Sete', rating: 7 });
+  assert.equal((await call('GET', '/api/entries/' + ok7.data.id)).data.rating, 7);
+  await call('DELETE', '/api/entries/' + dec.data.id);
+  await call('DELETE', '/api/entries/' + neg.data.id);
+  await call('DELETE', '/api/entries/' + ok7.data.id);
 });
 
 test('capa: envia imagem, serve com login, rejeita não-imagem e remove', async () => {
