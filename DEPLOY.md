@@ -72,6 +72,26 @@ npm start                # http://localhost:3000
 
 Precisa de Node 22.13+. Para testar: `npm test`.
 
+## Usar no celular (app instalável / PWA)
+
+O WAndCine já vem pronto para virar um app no celular: ícone com a sua logo, tela cheia (sem barra do navegador) e um aviso amigável quando o servidor está inacessível.
+
+**Em casa (mesma rede Wi-Fi), sem HTTPS**
+- **Android (Chrome):** abra `http://192.168.3.50:3000`, toque no menu ⋮ e em **Adicionar à tela inicial**.
+- **iPhone (Safari):** abra o endereço, toque em **Compartilhar** e em **Adicionar à Tela de Início**.
+
+Sem HTTPS o navegador cria só um atalho. A instalação completa (botão **Instalar app** dentro do WAndCine) e o aviso de "sem conexão" exigem HTTPS.
+
+**Fora de casa e com instalação completa: Tailscale (gratuito)**
+1. Instale o Tailscale no container (precisa do `/dev/net/tun` liberado no LXC) e no celular, entrando na mesma conta.
+2. No painel do Tailscale (login.tailscale.com → DNS), ative **MagicDNS** e **HTTPS Certificates**.
+3. No container: `tailscale serve --bg 3000`. O comando mostra um endereço `https://NOME.SEU-TAILNET.ts.net`.
+4. No celular, conectado ao Tailscale, abra esse endereço e instale o app (Android: botão **Instalar app** ou menu ⋮ → Instalar app; iPhone: Compartilhar → Adicionar à Tela de Início).
+
+Só os aparelhos da sua conta Tailscale acessam, e não é preciso abrir portas no roteador. Se o login recusar a requisição, acrescente `TRUST_PROXY=1` em `/etc/meu-arquivo.env` e reinicie o serviço (`systemctl restart meu-arquivo`).
+
+A logo é enviada pela própria interface (**Trocar logo**) e vira o ícone do app; envie-a antes de instalar. Se trocar depois, remova o app da tela inicial e instale de novo para atualizar o ícone.
+
 ## Importar o CSV exportado do IMDb
 
 1. No IMDb, abra **Suas avaliações** (ou uma lista sua) e use **Exportar** para baixar o CSV.

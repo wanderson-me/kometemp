@@ -230,3 +230,40 @@ test('logo: envia (só logado), é pública para a tela de login e pode ser remo
     fs.rmSync(dir3, { recursive: true, force: true });
   }
 });
+
+test('PWA: manifesto, service worker, página offline e ícones são públicos e coerentes', async () => {
+  const dir4 = fs.mkdtempSync(path.join(os.tmpdir(), 'ma-pwa-'));
+  const app = createApp(loadConfig({ DATA_DIR: dir4, APP_USERNAME: 'eu', APP_PASSWORD: 'senha-longa-123', AUTO_SEED: '0' }));
+  await new Promise((r) => app.server.listen(0, '127.0.0.1', r));
+  const b = 'http://127.0.0.1:' + app.server.address().port;
+  try {
+    const m = await fetch(b + '/manifest.webmanifest');
+    assert.equal(m.status, 200);
+    assert.match(m.headers.get('content-type'), /manifest\+json/);
+    const man = await m.json();
+    assert.equal(man.display, 'standalone');
+    assert.equal(man.start_url, '/');
+    assert.ok(man.icons.some((i) => i.purpose === 'maskable'));
+    const icon = await fetch(b + man.icons[0].src);                       // sem logo: ícone padrão
+    assert.equal(icon.status, 200);
+    assert.equal(icon.headers.get('content-type'), 'image/png');
+    assert.equal((await fetch(b + '/apple-touch-icon.png')).status, 200);
+
+    const sw = await fetch(b + '/sw.js');
+    assert.equal(sw.status, 200);
+    assert.match(sw.headers.get('content-type'), /javascript/);
+    assert.equal((await fetch(b + '/offline.html')).status, 200);
+
+    // com logo enviada, o manifesto passa a apontar para ela
+    const lg = await fetch(b + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'eu', password: 'senha-longa-123' }) });
+    const ck = lg.headers.get('set-cookie').split(';')[0];
+    await fetch(b + '/api/logo', { method: 'PUT', headers: { cookie: ck }, body: PNG });
+    const man2 = await (await fetch(b + '/manifest.webmanifest')).json();
+    assert.match(man2.icons[0].src, /^\/icon\.png\?v=\d+$/);
+    assert.equal(man2.icons[0].type, 'image/png');
+    assert.equal((await fetch(b + man2.icons[0].src)).headers.get('content-type'), 'image/png');
+  } finally {
+    await new Promise((r) => app.server.close(r));
+    fs.rmSync(dir4, { recursive: true, force: true });
+  }
+});

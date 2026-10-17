@@ -14,7 +14,7 @@ const MIME = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json; charset=utf-8',
   '.webmanifest': 'application/manifest+json'
 };
-const PUBLIC_FILES = new Set(['/styles.css', '/login.js', '/favicon.svg']); // acessíveis sem login
+const PUBLIC_FILES = new Set(['/styles.css', '/login.js', '/favicon.svg', '/offline.html']); // acessíveis sem login
 const COOKIE = 'ma_session';
 
 function loadConfig(env) {
@@ -351,6 +351,31 @@ function createApp(cfg) {
       if (p === '/login') {
         if (logged) return send(req, res, 302, '', { Location: '/' });
         return send(req, res, 200, page('login.html'), { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store' });
+      }
+      if (p === '/sw.js') {
+        return serveFile(req, res, path.join(PUBLIC_DIR, 'sw.js'), MIME['.js'], 'no-cache');
+      }
+      if (p === '/manifest.webmanifest') {
+        const lg = findLogo();
+        const v = lg ? '?v=' + lg.version : '';
+        const type = lg ? IMG_MIME[lg.ext] : 'image/png';
+        const icons = [
+          { src: '/icon.png' + v, sizes: '192x192 512x512', type, purpose: 'any' },
+          { src: '/icon.png' + v, sizes: '192x192 512x512', type, purpose: 'maskable' }
+        ];
+        const manifest = {
+          name: 'WAndCine', short_name: 'WAndCine', description: 'Meu catálogo de filmes e séries',
+          lang: 'pt-BR', id: '/', start_url: '/', scope: '/', display: 'standalone', orientation: 'portrait',
+          background_color: '#1c1914', theme_color: '#1c1914', icons
+        };
+        return send(req, res, 200, JSON.stringify(manifest), { 'Content-Type': MIME['.webmanifest'], 'Cache-Control': 'no-cache' });
+      }
+      if (p === '/icon.png' || p === '/apple-touch-icon.png') {
+        const lg = findLogo();
+        const cache = url.searchParams.has('v') ? 'public, max-age=31536000, immutable' : 'no-cache';
+        if (lg) return serveFile(req, res, lg.file, IMG_MIME[lg.ext], cache);
+        const def = path.join(PUBLIC_DIR, 'icons', p === '/icon.png' ? 'default-512.png' : 'default-180.png');
+        return serveFile(req, res, def, 'image/png', 'no-cache');
       }
       if (p === '/logo') {
         const lg = findLogo();

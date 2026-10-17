@@ -1169,6 +1169,32 @@
   });
 
   document.getElementById('logo-btn').addEventListener('click', pickLogo);
+
+  // ---- Instalar como app (PWA) ----
+  var installBtn = document.getElementById('install-btn');
+  var installPrompt = null;
+  var isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  var isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+  if (!isStandalone) {
+    window.addEventListener('beforeinstallprompt', function (ev) {
+      ev.preventDefault();
+      installPrompt = ev;
+      installBtn.classList.remove('hidden');
+    });
+    if (isIos) installBtn.classList.remove('hidden');
+  }
+  window.addEventListener('appinstalled', function () { installBtn.classList.add('hidden'); installPrompt = null; });
+  installBtn.addEventListener('click', function () {
+    if (installPrompt) {
+      installPrompt.prompt();
+      installPrompt.userChoice.then(function () { installPrompt = null; installBtn.classList.add('hidden'); });
+    } else if (isIos) {
+      showToast('No iPhone: toque em Compartilhar e depois em "Adicionar à Tela de Início".');
+    }
+  });
+  if ('serviceWorker' in navigator && window.isSecureContext) {
+    navigator.serviceWorker.register('/sw.js').catch(function () {});
+  }
   document.getElementById('logout-btn').addEventListener('click', function () {
     fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).finally(function () { location.replace('/login'); });
   });
