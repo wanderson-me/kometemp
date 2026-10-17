@@ -29,7 +29,7 @@ curl -fsSL https://raw.githubusercontent.com/wanderson-me/kometemp/main/deploy/i
 bash install.sh
 ```
 
-O script instala o Node 22, baixa o app, pergunta usuário e senha, cria o serviço `meu-arquivo` (sobe sozinho com a máquina) e mostra o endereço `http://IP:3000`. Os dados ficam em `/var/lib/meu-arquivo`. Para atualizar, rode `bash install.sh` de novo.
+O script instala o Node 22, baixa o app, pergunta usuário e senha, cria o serviço `meu-arquivo` (sobe sozinho com a máquina) e mostra o endereço `http://IP:3000`. Os dados ficam em `/var/lib/meu-arquivo`. Para atualizar, rode `bash install.sh` de novo (ou, manualmente: `git -c safe.directory=/opt/meu-arquivo/app -C /opt/meu-arquivo/app pull && systemctl restart meu-arquivo`).
 
 - Em rede local por HTTP, o login funciona normalmente. Para HTTPS e acesso de fora, use Tailscale (`tailscale serve --bg 3000`) ou um proxy como o Caddy. Em container LXC, o Tailscale precisa do `/dev/net/tun` liberado na configuração do container.
 - Backup: inclua o container no backup do Proxmox e/ou use **Baixar backup** dentro do app.

@@ -31,7 +31,7 @@ id meuarq >/dev/null 2>&1 || useradd -r -m -d /opt/meu-arquivo -s /usr/sbin/nolo
 
 echo "==> Código"
 if [ -d "$APP_DIR/.git" ]; then
-  git -C "$APP_DIR" pull --ff-only
+  git -c safe.directory="$APP_DIR" -C "$APP_DIR" pull --ff-only
 else
   git clone "$REPO" "$APP_DIR"
 fi
