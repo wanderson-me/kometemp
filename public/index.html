@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Meu Arquivo — jogos, filmes e séries</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="sidebar-mark">MA</span>
+      <div>
+        <h1 class="brand">Meu Arquivo</h1>
+        <p class="tagline">jogos, filmes e séries que já passaram por aqui</p>
+      </div>
+    </div>
+    <nav class="side-nav">
+      <button class="tab tab--game" data-type="game"><span class="nav-dot"></span>Jogos<span class="tab-count" id="count-game"></span></button>
+      <button class="tab tab--movie" data-type="movie"><span class="nav-dot"></span>Filmes<span class="tab-count" id="count-movie"></span></button>
+      <button class="tab tab--series" data-type="series"><span class="nav-dot"></span>Séries<span class="tab-count" id="count-series"></span></button>
+    </nav>
+    <div class="sidebar-foot">
+      <a class="foot-link" id="backup-link" href="/api/export?covers=1">Baixar backup</a>
+      <button class="foot-link" id="logout-btn" type="button">Sair</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <section class="toolbar">
+      <input type="search" id="search-input" placeholder="Buscar por título…">
+      <select id="sort-select">
+        <option value="recent">Mais recentes</option>
+        <option value="title">Título (A–Z)</option>
+        <option value="rating">Melhor nota</option>
+      </select>
+      <button id="add-btn" class="btn-add">+ Adicionar</button>
+    </section>
+
+    <div id="movie-recap" class="movie-recap"></div>
+
+    <section id="stats" class="stats"></section>
+
+    <div id="genre-breakdown" class="genre-breakdown"></div>
+
+    <div id="form-panel" class="form-panel hidden" data-type="movie"></div>
+
+    <main id="list" class="list"></main>
+    <p id="empty-state" class="empty hidden"></p>
+  </div>
+</div>
+<div id="toast" class="toast hidden"></div>
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "meu-arquivo",
+  "version": "1.0.0",
+  "description": "Meu Arquivo — catálogo pessoal de jogos, filmes e séries (Node.js + SQLite, login de usuário único)",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env server.js",
+    "dev": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --watch server.js",
+    "hash-password": "node scripts/hash-password.js",
+    "seed": "node scripts/import.js seed/entries.json",
+    "test": "node --test test/*.test.js"
+  },
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,295 @@
+'use strict';
+// Meu Arquivo — servidor (Node.js puro + SQLite embutido, sem dependências).
+const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
+const db = require('./lib/db');
+const auth = require('./lib/auth');
+
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json'
+};
+const PUBLIC_FILES = new Set(['/styles.css', '/login.js', '/favicon.svg']); // acessíveis sem login
+const COOKIE = 'ma_session';
+
+function loadConfig(env) {
+  env = env || process.env;
+  const cfg = {
+    port: parseInt(env.PORT, 10) || 3000,
+    dataDir: path.resolve(env.DATA_DIR || path.join(__dirname, 'data')),
+    username: (env.APP_USERNAME || 'wanderson').trim(),
+    password: env.APP_PASSWORD || '',
+    passwordHash: env.APP_PASSWORD_HASH || '',
+    sessionSecret: env.SESSION_SECRET || '',
+    sessionDays: parseInt(env.SESSION_DAYS, 10) || 30,
+    trustProxy: env.TRUST_PROXY === '1' || env.TRUST_PROXY === 'true',
+    secureCookie: env.COOKIE_SECURE ? env.COOKIE_SECURE !== '0' : env.NODE_ENV === 'production',
+    autoSeed: env.AUTO_SEED !== '0',
+    seedFile: env.SEED_FILE || path.join(__dirname, 'seed', 'entries.json')
+  };
+  return cfg;
+}
+
+function createApp(cfg) {
+  if (!cfg.passwordHash && !cfg.password) {
+    throw new Error('Defina APP_PASSWORD (ou APP_PASSWORD_HASH) para proteger o acesso.');
+  }
+  const passwordHash = cfg.passwordHash || auth.hashPassword(cfg.password);
+  const secret = auth.loadSecret(cfg.sessionSecret, cfg.dataDir);
+  const store = db.open(cfg.dataDir);
+  const limiter = auth.createLimiter(5, 15 * 60 * 1000);
+
+  if (cfg.autoSeed && store.count() === 0 && fs.existsSync(cfg.seedFile)) {
+    try {
+      const items = JSON.parse(fs.readFileSync(cfg.seedFile, 'utf8'));
+      const seedCovers = path.join(path.dirname(cfg.seedFile), 'covers');
+      const res = store.importMany(items, {
+        coverResolver(e) {
+          if (!e.id) return null;
+          const f = ['jpg', 'png', 'webp', 'gif'].map((x) => path.join(seedCovers, e.id + '.' + x)).find((p) => fs.existsSync(p));
+          return f ? fs.readFileSync(f) : null;
+        }
+      });
+      console.log('[seed] registros iniciais importados:', JSON.stringify(res));
+    } catch (err) {
+      console.error('[seed] falhou:', err.message);
+    }
+  }
+
+  const htmlCache = {};
+  function page(name) {
+    if (!htmlCache[name] || process.env.NODE_ENV !== 'production') {
+      htmlCache[name] = fs.readFileSync(path.join(PUBLIC_DIR, name));
+    }
+    return htmlCache[name];
+  }
+
+  function clientIp(req) {
+    if (cfg.trustProxy) {
+      const xf = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+      if (xf) return xf;
+    }
+    return req.socket.remoteAddress || 'unknown';
+  }
+  function isSecure(req) {
+    return cfg.secureCookie || (cfg.trustProxy && req.headers['x-forwarded-proto'] === 'https');
+  }
+
+  function baseHeaders(req) {
+    const h = {
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'same-origin',
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Content-Security-Policy': [
+        "default-src 'self'",
+        "script-src 'self' https://cdnjs.cloudflare.com",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src https://fonts.gstatic.com",
+        "img-src 'self' data: blob:",
+        "connect-src 'self'",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "form-action 'self'",
+        "frame-ancestors 'none'"
+      ].join('; ')
+    };
+    if (isSecure(req)) h['Strict-Transport-Security'] = 'max-age=15552000';
+    return h;
+  }
+
+  function send(req, res, status, body, headers) {
+    res.writeHead(status, Object.assign(baseHeaders(req), headers || {}));
+    res.end(body);
+  }
+  function json(req, res, status, obj, headers) {
+    send(req, res, status, JSON.stringify(obj), Object.assign({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }, headers));
+  }
+
+  function readBody(req, limit) {
+    return new Promise((resolve, reject) => {
+      const chunks = [];
+      let size = 0;
+      req.on('data', (c) => {
+        size += c.length;
+        if (size > limit) {
+          const e = new Error('Arquivo grande demais.'); e.status = 413;
+          req.destroy(); reject(e); return;
+        }
+        chunks.push(c);
+      });
+      req.on('end', () => resolve(Buffer.concat(chunks)));
+      req.on('error', reject);
+    });
+  }
+  async function readJson(req, limit) {
+    const buf = await readBody(req, limit);
+    try { return JSON.parse(buf.toString('utf8') || 'null'); }
+    catch (_) { const e = new Error('JSON inválido.'); e.status = 400; throw e; }
+  }
+
+  function currentSession(req) {
+    const token = auth.parseCookies(req.headers.cookie)[COOKIE];
+    const s = auth.readSession(secret, token);
+    return s && auth.safeEqual(s.u, cfg.username) ? s : null;
+  }
+
+  function cookieHeader(req, value, maxAgeSec) {
+    return COOKIE + '=' + value + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=' + maxAgeSec + (isSecure(req) ? '; Secure' : '');
+  }
+
+  // Bloqueia requisições que mudam dados vindas de outra origem.
+  function sameOrigin(req) {
+    const origin = req.headers.origin;
+    if (!origin) return true;
+    try {
+      const host = (cfg.trustProxy && req.headers['x-forwarded-host']) || req.headers.host;
+      return new URL(origin).host === host;
+    } catch (_) { return false; }
+  }
+
+  async function handleApi(req, res, url) {
+    const method = req.method;
+    const p = url.pathname;
+
+    if (method !== 'GET' && method !== 'HEAD' && !sameOrigin(req)) {
+      return json(req, res, 403, { error: 'Origem não permitida.' });
+    }
+
+    if (p === '/api/login' && method === 'POST') {
+      const ip = clientIp(req);
+      const wait = limiter.blocked(ip);
+      if (wait) return json(req, res, 429, { error: 'Muitas tentativas. Tente de novo em ' + Math.ceil(wait / 60) + ' min.' }, { 'Retry-After': String(wait) });
+      const body = await readJson(req, 4096);
+      const okUser = auth.safeEqual((body && body.username) || '', cfg.username);
+      const okPass = auth.verifyPassword(String((body && body.password) || ''), passwordHash);
+      if (!(okUser && okPass)) {
+        limiter.fail(ip);
+        return json(req, res, 401, { error: 'Usuário ou senha incorretos.' });
+      }
+      limiter.reset(ip);
+      const token = auth.createSession(secret, cfg.username, cfg.sessionDays);
+      return json(req, res, 200, { ok: true }, { 'Set-Cookie': cookieHeader(req, token, cfg.sessionDays * 86400) });
+    }
+
+    if (p === '/api/logout' && method === 'POST') {
+      return json(req, res, 200, { ok: true }, { 'Set-Cookie': cookieHeader(req, '', 0) });
+    }
+
+    if (!currentSession(req)) return json(req, res, 401, { error: 'Sessão expirada. Entre novamente.' });
+
+    if (p === '/api/me' && method === 'GET') return json(req, res, 200, { user: cfg.username });
+
+    if (p === '/api/entries' && method === 'GET') return json(req, res, 200, store.list());
+    if (p === '/api/entries' && method === 'POST') {
+      return json(req, res, 201, store.create(await readJson(req, 64 * 1024)));
+    }
+
+    if (p === '/api/export' && method === 'GET') {
+      const withCovers = url.searchParams.get('covers') === '1';
+      const stamp = new Date().toISOString().slice(0, 10);
+      return json(req, res, 200, store.exportAll(withCovers), {
+        'Content-Disposition': 'attachment; filename="meu-arquivo-' + stamp + (withCovers ? '-com-capas' : '') + '.json"'
+      });
+    }
+    if (p === '/api/import' && method === 'POST') {
+      const items = await readJson(req, 100 * 1024 * 1024);
+      return json(req, res, 200, store.importMany(items));
+    }
+
+    const m = p.match(/^\/api\/entries\/([A-Za-z0-9_-]{1,40})(\/cover)?$/);
+    if (m) {
+      const id = m[1];
+      let out;
+      if (!m[2]) {
+        if (method === 'GET') out = store.get(id);
+        else if (method === 'PUT') out = store.update(id, await readJson(req, 64 * 1024));
+        else if (method === 'DELETE') {
+          return store.remove(id) ? json(req, res, 200, { ok: true }) : json(req, res, 404, { error: 'Registro não encontrado.' });
+        } else return json(req, res, 405, { error: 'Método não permitido.' });
+      } else {
+        if (method === 'PUT') out = store.setCover(id, await readBody(req, 8 * 1024 * 1024));
+        else if (method === 'DELETE') out = store.clearCover(id);
+        else return json(req, res, 405, { error: 'Método não permitido.' });
+      }
+      return out ? json(req, res, 200, out) : json(req, res, 404, { error: 'Registro não encontrado.' });
+    }
+
+    return json(req, res, 404, { error: 'Não encontrado.' });
+  }
+
+  function serveFile(req, res, file, mime, cache) {
+    fs.readFile(file, (err, data) => {
+      if (err) return send(req, res, 404, 'Não encontrado', { 'Content-Type': 'text/plain; charset=utf-8' });
+      send(req, res, 200, req.method === 'HEAD' ? '' : data, { 'Content-Type': mime, 'Cache-Control': cache });
+    });
+  }
+
+  async function handler(req, res) {
+    try {
+      const url = new URL(req.url, 'http://x');
+      const p = decodeURIComponent(url.pathname);
+
+      if (p === '/healthz') return json(req, res, 200, { ok: true });
+      if (p.startsWith('/api/')) return await handleApi(req, res, url);
+
+      if (req.method !== 'GET' && req.method !== 'HEAD') return send(req, res, 405, 'Método não permitido');
+
+      const logged = !!currentSession(req);
+
+      if (p === '/login') {
+        if (logged) return send(req, res, 302, '', { Location: '/' });
+        return send(req, res, 200, page('login.html'), { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store' });
+      }
+      if (PUBLIC_FILES.has(p)) {
+        return serveFile(req, res, path.join(PUBLIC_DIR, p), MIME[path.extname(p)], 'no-cache');
+      }
+
+      // Tudo daqui para baixo exige login.
+      if (!logged) {
+        return p.startsWith('/covers/')
+          ? send(req, res, 401, 'Não autorizado', { 'Content-Type': 'text/plain; charset=utf-8' })
+          : send(req, res, 302, '', { Location: '/login' });
+      }
+      if (p === '/' || p === '/index.html') {
+        return send(req, res, 200, page('index.html'), { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store' });
+      }
+      if (p === '/app.js') return serveFile(req, res, path.join(PUBLIC_DIR, 'app.js'), MIME['.js'], 'no-cache');
+      if (p.startsWith('/covers/')) {
+        const c = store.coverFile(p.slice('/covers/'.length));
+        if (!c) return send(req, res, 404, 'Não encontrado', { 'Content-Type': 'text/plain; charset=utf-8' });
+        return serveFile(req, res, c.file, c.mime, 'private, max-age=31536000, immutable');
+      }
+      return send(req, res, 404, 'Não encontrado', { 'Content-Type': 'text/plain; charset=utf-8' });
+    } catch (err) {
+      const status = err.status || 500;
+      if (status === 500) console.error(err);
+      if (!res.headersSent) {
+        return json(req, res, status, { error: status === 500 ? 'Erro interno.' : err.message });
+      }
+      res.end();
+    }
+  }
+
+  const server = http.createServer(handler);
+  server.on('close', () => store.close());
+  server.keepAliveTimeout = 65000;
+  server.requestTimeout = 120000;
+  return { server, store };
+}
+
+module.exports = { createApp, loadConfig };
+
+if (require.main === module) {
+  const cfg = loadConfig();
+  const { server } = createApp(cfg);
+  server.listen(cfg.port, '0.0.0.0', () => {
+    console.log('Meu Arquivo rodando em http://localhost:' + cfg.port + ' (usuário: ' + cfg.username + ')');
+  });
+  const stop = () => server.close(() => process.exit(0));
+  process.on('SIGTERM', stop);
+  process.on('SIGINT', stop);
+}
