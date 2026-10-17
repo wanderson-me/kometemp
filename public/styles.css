@@ -660,3 +660,11 @@ button, a, summary { -webkit-tap-highlight-color: transparent; }
 @media (max-width: 760px) {
   .form-panel { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); padding: 0 16px 16px; border-radius: 16px; }
 }
+
+/* ---- Formato da imagem de compartilhamento ---- */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--paper-raised); }
+.seg-btn { all: unset; box-sizing: border-box; cursor: pointer; padding: 10px 13px; font-family: var(--font-body); font-size: 0.82rem; font-weight: 600; color: var(--ink-soft); }
+.seg-btn + .seg-btn { border-left: 1px solid var(--line); }
+.seg-btn:hover { background: var(--paper-sunken); }
+.seg-btn.on { background: var(--ink); color: var(--paper); }
+.seg-btn:focus-visible { outline: 2px solid var(--movie); outline-offset: -2px; }

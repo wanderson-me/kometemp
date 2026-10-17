@@ -400,6 +400,11 @@
       '</div>' +
       '<div class="recap-actions">' +
         '<button type="button" class="btn-secondary" id="recap-copy-btn">Copiar texto</button>' +
+        '<div class="seg" role="group" aria-label="Formato da imagem">' +
+          Object.keys(SHARE_FORMATS).map(function (k) {
+            return '<button type="button" class="seg-btn' + (k === shareFormat ? ' on' : '') + '" data-fmt="' + k + '" aria-pressed="' + (k === shareFormat) + '">' + SHARE_FORMATS[k].label + '</button>';
+          }).join('') +
+        '</div>' +
         '<button type="button" class="btn-add" id="recap-image-btn">Baixar imagem</button>' +
         (canShareFiles() ? '<button type="button" class="btn-secondary" id="recap-share-btn">Compartilhar</button>' : '') +
         '<button type="button" class="btn-secondary" id="recap-bg-btn">' + (shareBgVersion ? 'Trocar fundo' : 'Escolher fundo') + '</button>' +
@@ -441,6 +446,12 @@
   }
 
   // ---- Imagem quadrada (800x800) para redes sociais, desenhada direto no canvas ----
+  var SHARE_FORMATS = {
+    square: { H: 800, label: '800×800', maxRows: 3, heroH: 210, maxTile: 133 },
+    portrait: { H: 1000, label: '800×1000', maxRows: 4, heroH: 270, maxTile: 190 }
+  };
+  var shareFormat = 'square';
+  try { var savedFmt = localStorage.getItem('wandcine.shareFormat'); if (SHARE_FORMATS[savedFmt]) shareFormat = savedFmt; } catch (_) { /* sem armazenamento */ }
   var SHARE = { W: 800, M: 48, BG: '#1c1914', GOLD: '#f6dfab', STAR: '#e8c267', DISPLAY: '"Bebas Neue", "Arial Narrow", Impact, sans-serif', BODY: '"Work Sans", -apple-system, "Segoe UI", sans-serif' };
 
   function loadImage(src) {
@@ -545,7 +556,8 @@
 
   async function buildShareImage() {
     var d = getRecapData();
-    var W = SHARE.W, M = SHARE.M, CW = W - 2 * M;
+    var FMT = SHARE_FORMATS[shareFormat] || SHARE_FORMATS.square;
+    var W = SHARE.W, H = FMT.H, M = SHARE.M, CW = W - 2 * M;
     try {
       await Promise.all([
         document.fonts.load('64px "Bebas Neue"'),
@@ -559,19 +571,19 @@
     var hasHero = !!top;
 
     // Layout da faixa de pôsteres: o maior tamanho em que todos cabem (até 3 linhas)
-    var HERO_H = 210;
+    var HERO_H = FMT.heroH;
     var headBottom = M + 78 + 24 + 74 + 28;           // fim do cabeçalho + números
     var regionTop = headBottom + (hasHero ? HERO_H + 28 + 26 : 0);
-    var footerY = W - M + 4;
+    var footerY = H - M + 4;
     var regionBottom = footerY - 34;
     var gridTop = regionTop + 36;
     var availH = regionBottom - gridTop;
     var tileW = 48, perRow = 1, rows = 1, overflow = 0;
     var shown = d.monthMovies;
     var fitted = false;
-    for (var tw0 = 133; tw0 >= 48 && !fitted; tw0--) {
+    for (var tw0 = FMT.maxTile; tw0 >= 48 && !fitted; tw0--) {
       var th0 = Math.round(tw0 * 1.5);
-      var r0 = Math.min(3, Math.floor((availH + 8) / (th0 + 8)));
+      var r0 = Math.min(FMT.maxRows, Math.floor((availH + 8) / (th0 + 8)));
       var c0 = Math.floor((CW + 8) / (tw0 + 8));
       if (r0 >= 1 && c0 * r0 >= n) {
         tileW = tw0; perRow = c0; rows = Math.max(1, Math.ceil(n / c0)); fitted = true;
@@ -580,7 +592,7 @@
     if (!fitted) {
       tileW = 48;
       perRow = Math.floor((CW + 8) / (tileW + 8));
-      rows = Math.max(1, Math.min(3, Math.floor((availH + 8) / (Math.round(tileW * 1.5) + 8))));
+      rows = Math.max(1, Math.min(FMT.maxRows, Math.floor((availH + 8) / (Math.round(tileW * 1.5) + 8))));
       var cap = perRow * rows;
       shown = d.monthMovies.slice(0, cap - 1);
       overflow = n - shown.length;
@@ -596,7 +608,7 @@
     var S = 2;
     var big = document.createElement('canvas');
     big.width = W * S;
-    big.height = W * S;
+    big.height = H * S;
     var ctx = big.getContext('2d');
     ctx.scale(S, S);
     ctx.textBaseline = 'alphabetic';
@@ -604,28 +616,28 @@
 
     // Fundo
     ctx.fillStyle = SHARE.BG;
-    ctx.fillRect(0, 0, W, W);
-    var bg = ctx.createLinearGradient(0, 0, W, W);
+    ctx.fillRect(0, 0, W, H);
+    var bg = ctx.createLinearGradient(0, 0, W, H);
     bg.addColorStop(0, '#241f19');
     bg.addColorStop(0.55, '#2d251d');
     bg.addColorStop(1, '#6b2f19');
     ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, W);
+    ctx.fillRect(0, 0, W, H);
 
     if (bgImg) {
       // Ilustração do usuário ao fundo, com opacidade baixa, e um véu escuro para o texto ficar legível.
       ctx.save();
       ctx.globalAlpha = 0.34;
-      var bs = Math.max(W / bgImg.width, W / bgImg.height);
+      var bs = Math.max(W / bgImg.width, H / bgImg.height);
       var bw = bgImg.width * bs, bh = bgImg.height * bs;
-      ctx.drawImage(bgImg, (W - bw) / 2, (W - bh) / 2, bw, bh);
+      ctx.drawImage(bgImg, (W - bw) / 2, (H - bh) / 2, bw, bh);
       ctx.restore();
-      var veil = ctx.createLinearGradient(0, 0, 0, W);
+      var veil = ctx.createLinearGradient(0, 0, 0, H);
       veil.addColorStop(0, 'rgba(20,16,12,0.62)');
       veil.addColorStop(0.45, 'rgba(20,16,12,0.30)');
       veil.addColorStop(1, 'rgba(20,16,12,0.72)');
       ctx.fillStyle = veil;
-      ctx.fillRect(0, 0, W, W);
+      ctx.fillRect(0, 0, W, H);
     }
 
     // Título: apenas mês e ano
@@ -774,19 +786,19 @@
       ctx.textAlign = 'left';
     }
 
-    // Saída final: exatamente 800x800 (desenhado em 2x e reduzido para ficar nítido)
+    // Saída final: exatamente 800x800 ou 800x1000 (desenhado em 2x e reduzido para ficar nítido)
     var out = document.createElement('canvas');
     out.width = W;
-    out.height = W;
+    out.height = H;
     var octx = out.getContext('2d');
     octx.imageSmoothingEnabled = true;
     octx.imageSmoothingQuality = 'high';
-    octx.drawImage(big, 0, 0, W, W);
+    octx.drawImage(big, 0, 0, W, H);
     return new Promise(function (resolve) { out.toBlob(resolve, 'image/png'); });
   }
 
   function recapFileName() {
-    return 'meu-registro-' + new Date().toISOString().slice(0, 7) + '.png';
+    return 'wandcine-' + new Date().toISOString().slice(0, 7) + '-' + SHARE_FORMATS[shareFormat].label.replace('×', 'x') + '.png';
   }
 
   async function downloadRecapImage() {
@@ -1151,6 +1163,13 @@
   });
 
   document.getElementById('movie-recap').addEventListener('click', function (e) {
+    var fmtBtn = e.target.closest('[data-fmt]');
+    if (fmtBtn && SHARE_FORMATS[fmtBtn.dataset.fmt]) {
+      shareFormat = fmtBtn.dataset.fmt;
+      try { localStorage.setItem('wandcine.shareFormat', shareFormat); } catch (_) { /* sem armazenamento */ }
+      renderMovieRecap();
+      return;
+    }
     if (e.target.closest('#recap-copy-btn')) { copyRecapText(); return; }
     if (e.target.closest('#recap-image-btn')) { downloadRecapImage(); return; }
     if (e.target.closest('#recap-share-btn')) { shareRecapImage(); return; }
