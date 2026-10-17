@@ -19,6 +19,7 @@
     editingId: null,
     formOpen: false,
     genreFilter: null,
+    ratingFilter: 'all',
     genreBreakdownCollapsed: false
   };
 
@@ -184,8 +185,41 @@
     return 'background:linear-gradient(' + angle + 'deg,' + base[0] + ',' + base[1] + ')';
   }
 
+  // Filtro de nota: 'all' | 'none' | 'n:8' (exata) | 'r:7-8' (faixa)
+  function matchesRating(e, f) {
+    var r = Math.round(num(e.rating));
+    if (f === 'all') return true;
+    if (f === 'none') return r === 0;
+    var m = f.match(/^n:(\d+)$/);
+    if (m) return r === parseInt(m[1], 10);
+    m = f.match(/^r:(\d+)-(\d+)$/);
+    return !!m && r >= parseInt(m[1], 10) && r <= parseInt(m[2], 10);
+  }
+
+  function ratingFilterLabel(f) {
+    var sel = document.getElementById('rating-filter');
+    var opt = sel && sel.querySelector('option[value="' + f + '"]');
+    return opt ? opt.textContent : '';
+  }
+
+  function renderFilterSummary(shown, total) {
+    var el = document.getElementById('filter-summary');
+    var parts = [];
+    if (state.ratingFilter !== 'all') parts.push(ratingFilterLabel(state.ratingFilter).toLowerCase());
+    if (state.activeTab === 'movie' && state.genreFilter) parts.push(escapeHtml(state.genreFilter));
+    if (state.search.trim()) parts.push('“' + escapeHtml(state.search.trim()) + '”');
+    if (!parts.length) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+    el.classList.remove('hidden');
+    el.innerHTML = '<b>' + shown + '</b> de ' + total + ' ' + LABELS[state.activeTab].plural + ' · ' + parts.join(' · ') +
+      ' <button type="button" class="filter-clear" id="filter-clear-btn">Limpar filtros</button>';
+  }
+
   function renderList() {
     var list = entries.filter(function (e) { return e.type === state.activeTab; });
+    var tabTotal = list.length;
+    if (state.ratingFilter !== 'all') {
+      list = list.filter(function (e) { return matchesRating(e, state.ratingFilter); });
+    }
     if (state.activeTab === 'movie' && state.genreFilter) {
       list = list.filter(function (e) { return (e.genres || []).indexOf(state.genreFilter) !== -1; });
     }
@@ -201,6 +235,7 @@
       list.sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
     }
 
+    renderFilterSummary(list.length, tabTotal);
     var listEl = document.getElementById('list');
     var emptyEl = document.getElementById('empty-state');
     if (!list.length) {
@@ -209,7 +244,7 @@
       var total = entries.filter(function (e) { return e.type === state.activeTab; }).length;
       emptyEl.textContent = total === 0
         ? 'Nada por aqui ainda. Toque em "+ Adicionar" para registrar seu primeiro ' + LABELS[state.activeTab].name + '.'
-        : 'Nenhum resultado para essa busca.';
+        : 'Nenhum ' + LABELS[state.activeTab].name + ' com esse filtro.';
       return;
     }
     emptyEl.classList.add('hidden');
@@ -1087,7 +1122,9 @@
       state.activeTab = btn.dataset.type;
       state.search = '';
       state.genreFilter = null;
+      state.ratingFilter = 'all';
       document.getElementById('search-input').value = '';
+      document.getElementById('rating-filter').value = 'all';
       closeForm();
       render();
     });
@@ -1125,6 +1162,22 @@
 
   document.getElementById('search-input').addEventListener('input', function (e) {
     state.search = e.target.value;
+    renderList();
+  });
+
+  document.getElementById('rating-filter').addEventListener('change', function (e) {
+    state.ratingFilter = e.target.value;
+    renderList();
+  });
+
+  document.getElementById('filter-summary').addEventListener('click', function (e) {
+    if (!e.target.closest('#filter-clear-btn')) return;
+    state.ratingFilter = 'all';
+    state.genreFilter = null;
+    state.search = '';
+    document.getElementById('rating-filter').value = 'all';
+    document.getElementById('search-input').value = '';
+    renderGenreBreakdown();
     renderList();
   });
 

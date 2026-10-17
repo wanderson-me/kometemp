@@ -50,6 +50,19 @@
   <div class="main">
     <section class="toolbar">
       <input type="search" id="search-input" placeholder="Buscar por título…">
+      <select id="rating-filter" aria-label="Filtrar por nota">
+        <option value="all">Todas as notas</option>
+        <optgroup label="Faixas">
+          <option value="r:9-10">Nota 9–10</option>
+          <option value="r:7-8">Nota 7–8</option>
+          <option value="r:5-6">Nota 5–6</option>
+          <option value="r:1-4">Nota 1–4</option>
+          <option value="none">Sem nota</option>
+        </optgroup>
+        <optgroup label="Nota exata">
+          <option value="n:10">Nota 10</option><option value="n:9">Nota 9</option><option value="n:8">Nota 8</option><option value="n:7">Nota 7</option><option value="n:6">Nota 6</option><option value="n:5">Nota 5</option><option value="n:4">Nota 4</option><option value="n:3">Nota 3</option><option value="n:2">Nota 2</option><option value="n:1">Nota 1</option>
+        </optgroup>
+      </select>
       <select id="sort-select">
         <option value="recent">Mais recentes</option>
         <option value="title">Título (A–Z)</option>
@@ -57,6 +70,8 @@
       </select>
       <button id="add-btn" class="btn-add">+ Adicionar</button>
     </section>
+
+    <p id="filter-summary" class="filter-summary hidden" role="status"></p>
 
     <div id="import-result" class="import-result hidden" role="status"></div>
 

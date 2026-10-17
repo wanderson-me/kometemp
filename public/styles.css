@@ -624,3 +624,12 @@ button, a, summary { -webkit-tap-highlight-color: transparent; }
   .form-field--rating { grid-column: span 2; }
   .star-input { flex-wrap: nowrap; }
 }
+
+/* ---- Filtros ---- */
+.filter-summary { margin: -8px 0 18px; font-size: 0.86rem; color: var(--ink-soft); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.filter-summary b { color: var(--ink); }
+.filter-clear { all: unset; cursor: pointer; margin-left: 6px; font-weight: 600; font-size: 0.82rem; color: var(--movie-deep); text-decoration: underline; text-underline-offset: 3px; }
+.filter-clear:focus-visible { outline: 2px solid var(--movie); outline-offset: 2px; border-radius: 4px; }
+@media (max-width: 760px) {
+  .toolbar #rating-filter { width: 100%; }
+}
