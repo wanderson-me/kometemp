@@ -24,6 +24,7 @@ O app é um servidor Node.js (22.13 ou mais novo) com banco SQLite. Não tem dep
 Num Debian/Ubuntu (por exemplo um container LXC no Proxmox, com 1 vCPU, 512 MB de RAM e 4 GB de disco), como root:
 
 ```bash
+apt update && apt install -y curl     # imagens mínimas do Debian não trazem o curl
 curl -fsSL https://raw.githubusercontent.com/wanderson-me/kometemp/main/deploy/install-linux.sh -o install.sh
 bash install.sh
 ```
