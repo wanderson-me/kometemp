@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const db = require('./lib/db');
 const auth = require('./lib/auth');
+const { createTmdb, imdbId } = require('./lib/tmdb');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const MIME = {
@@ -28,7 +29,11 @@ function loadConfig(env) {
     trustProxy: env.TRUST_PROXY === '1' || env.TRUST_PROXY === 'true',
     secureCookie: env.COOKIE_SECURE ? env.COOKIE_SECURE !== '0' : env.NODE_ENV === 'production',
     autoSeed: env.AUTO_SEED !== '0',
-    seedFile: env.SEED_FILE || path.join(__dirname, 'seed', 'entries.json')
+    seedFile: env.SEED_FILE || path.join(__dirname, 'seed', 'entries.json'),
+    tmdbKey: env.TMDB_API_KEY || '',
+    tmdbApiBase: env.TMDB_API_BASE || '',
+    tmdbImageBase: env.TMDB_IMAGE_BASE || '',
+    tmdbDelayMs: env.TMDB_DELAY_MS ? parseInt(env.TMDB_DELAY_MS, 10) : 150
   };
   return cfg;
 }
@@ -41,6 +46,38 @@ function createApp(cfg) {
   const secret = auth.loadSecret(cfg.sessionSecret, cfg.dataDir);
   const store = db.open(cfg.dataDir);
   const limiter = auth.createLimiter(5, 15 * 60 * 1000);
+  const tmdb = createTmdb({ key: cfg.tmdbKey, apiBase: cfg.tmdbApiBase, imageBase: cfg.tmdbImageBase });
+
+  // Tenta baixar o pôster de um registro sem capa. Nunca lança: falha vira "sem capa".
+  async function autoCover(entry) {
+    if (!tmdb || !entry || entry.coverUrl || entry.type === 'game' || !imdbId(entry.imdbUrl)) return entry;
+    try {
+      const buf = await tmdb.posterFor(entry);
+      if (buf) return store.setCover(entry.id, buf) || entry;
+    } catch (err) {
+      console.warn('[capas]', entry.title + ':', err.message);
+    }
+    return entry;
+  }
+
+  // Busca em lote das capas que faltam (roda em segundo plano; o estado é consultado por /api/covers/sync).
+  let job = { running: false, total: 0, done: 0, found: 0, missing: 0, failed: 0, error: null };
+  async function runCoverSync() {
+    const todo = store.list().filter((e) => !e.coverUrl && e.type !== 'game' && imdbId(e.imdbUrl));
+    job = { running: true, total: todo.length, done: 0, found: 0, missing: 0, failed: 0, error: null };
+    for (const e of todo) {
+      try {
+        const buf = await tmdb.posterFor(e);
+        if (buf) { store.setCover(e.id, buf); job.found++; } else job.missing++;
+      } catch (err) {
+        if (err.fatal) { job.error = err.message; break; }
+        job.failed++;
+      }
+      job.done++;
+      if (cfg.tmdbDelayMs > 0) await new Promise((r) => setTimeout(r, cfg.tmdbDelayMs));
+    }
+    job.running = false;
+  }
 
   if (cfg.autoSeed && store.count() === 0 && fs.existsSync(cfg.seedFile)) {
     try {
@@ -181,11 +218,20 @@ function createApp(cfg) {
 
     if (!currentSession(req)) return json(req, res, 401, { error: 'Sessão expirada. Entre novamente.' });
 
-    if (p === '/api/me' && method === 'GET') return json(req, res, 200, { user: cfg.username });
+    if (p === '/api/me' && method === 'GET') return json(req, res, 200, { user: cfg.username, covers: !!tmdb });
+
+    if (p === '/api/covers/sync') {
+      if (!tmdb) return json(req, res, 503, { error: 'Busca de capas desativada. Defina TMDB_API_KEY no servidor.' });
+      if (method === 'POST') {
+        if (!job.running) runCoverSync().catch((err) => { job.running = false; job.error = err.message; });
+        return json(req, res, 202, job);
+      }
+      if (method === 'GET') return json(req, res, 200, job);
+    }
 
     if (p === '/api/entries' && method === 'GET') return json(req, res, 200, store.list());
     if (p === '/api/entries' && method === 'POST') {
-      return json(req, res, 201, store.create(await readJson(req, 64 * 1024)));
+      return json(req, res, 201, await autoCover(store.create(await readJson(req, 64 * 1024))));
     }
 
     if (p === '/api/export' && method === 'GET') {
@@ -206,7 +252,7 @@ function createApp(cfg) {
       let out;
       if (!m[2]) {
         if (method === 'GET') out = store.get(id);
-        else if (method === 'PUT') out = store.update(id, await readJson(req, 64 * 1024));
+        else if (method === 'PUT') out = await autoCover(store.update(id, await readJson(req, 64 * 1024)));
         else if (method === 'DELETE') {
           return store.remove(id) ? json(req, res, 200, { ok: true }) : json(req, res, 404, { error: 'Registro não encontrado.' });
         } else return json(req, res, 405, { error: 'Método não permitido.' });

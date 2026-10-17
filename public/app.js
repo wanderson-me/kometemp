@@ -749,6 +749,44 @@
     fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).finally(function () { location.replace('/login'); });
   });
 
+  var coversBusy = false;
+  function syncCovers() {
+    if (coversBusy) return;
+    coversBusy = true;
+    var btn = document.getElementById('covers-btn');
+    btn.disabled = true;
+    var label = btn.textContent;
+    function finish(msg) {
+      coversBusy = false;
+      btn.disabled = false;
+      btn.textContent = label;
+      if (msg) showToast(msg);
+    }
+    api('POST', '/api/covers/sync').then(function poll(st) {
+      if (st.error) { finish('Capas: ' + st.error); return; }
+      if (st.running || (st.total > 0 && st.done < st.total && !st.error)) {
+        btn.textContent = 'Buscando… ' + st.done + '/' + st.total;
+        setTimeout(function () {
+          api('GET', '/api/covers/sync').then(poll).catch(function (e) { finish(e.message); });
+        }, 1500);
+        return;
+      }
+      api('GET', '/api/entries').then(function (list) {
+        entries = list;
+        render();
+        finish(st.total === 0 ? 'Nenhuma capa pendente.' :
+          st.found + ' capas encontradas' + (st.missing ? ', ' + st.missing + ' sem pôster no TMDB' : '') + (st.failed ? ', ' + st.failed + ' com erro' : '') + '.');
+      });
+    }).catch(function (e) { finish('Não foi possível buscar capas: ' + e.message); });
+  }
+  document.getElementById('covers-btn').addEventListener('click', syncCovers);
+  api('GET', '/api/me').then(function (me) {
+    if (me.covers) {
+      document.getElementById('covers-btn').classList.remove('hidden');
+      document.getElementById('tmdb-note').classList.remove('hidden');
+    }
+  }).catch(function () {});
+
   renderTabs();
   api('GET', '/api/entries').then(function (list) {
     entries = list;

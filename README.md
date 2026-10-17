@@ -20,6 +20,7 @@ Publicação na nuvem (Docker / Fly.io), variáveis de ambiente e backup: veja [
 ```
 server.js        servidor HTTP, rotas da API, cabeçalhos de segurança
 lib/db.js        SQLite: registros, capas, exportar/importar
+lib/tmdb.js      busca de pôsteres no TMDB
 lib/auth.js      senha (scrypt), sessão assinada, limite de tentativas
 public/          index.html, login.html, app.js, styles.css
 seed/            registros e capas iniciais
@@ -36,5 +37,6 @@ legacy/          versão anterior, publicada como Claude Artifact
 | GET / POST | `/api/entries` | listar / criar |
 | GET / PUT / DELETE | `/api/entries/:id` | |
 | PUT / DELETE | `/api/entries/:id/cover` | enviar (corpo = imagem) / remover capa |
+| POST / GET | `/api/covers/sync` | iniciar / consultar a busca de capas no TMDB (precisa de `TMDB_API_KEY`) |
 | GET | `/api/export?covers=1` | backup em JSON |
 | POST | `/api/import` | restaurar backup |

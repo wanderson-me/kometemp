@@ -584,3 +584,6 @@
 @media (max-width: 520px) {
   .toolbar input[type="search"] { flex: 0 0 auto; width: 100%; }
 }
+
+.tmdb-note { margin: 8px 13px 0; font-size: 0.66rem; line-height: 1.4; color: var(--sidebar-text-soft); opacity: 0.6; }
+@media (max-width: 760px) { .tmdb-note { display: none; } }
