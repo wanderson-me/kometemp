@@ -606,21 +606,16 @@
       ctx.fillRect(0, 0, W, W);
     }
 
-    // Cabeçalho: "Meu registro" + mês e ano no mesmo título
+    // Título: apenas mês e ano
     var monthTitle = d.monthLabel.charAt(0).toUpperCase() + d.monthLabel.slice(1);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '78px ' + SHARE.DISPLAY;
-    var h1 = 'Meu registro';
-    ctx.fillText(h1, M, M + 56);
-    var h1w = ctx.measureText(h1).width;
-    var monthSize = 46;
-    ctx.font = monthSize + 'px ' + SHARE.DISPLAY;
-    while (monthSize > 28 && h1w + 18 + ctx.measureText(monthTitle).width > CW) {
-      monthSize -= 2;
-      ctx.font = monthSize + 'px ' + SHARE.DISPLAY;
-    }
     ctx.fillStyle = SHARE.GOLD;
-    ctx.fillText(monthTitle, M + h1w + 18, M + 56);
+    var titleSize = 78;
+    ctx.font = titleSize + 'px ' + SHARE.DISPLAY;
+    while (titleSize > 36 && ctx.measureText(monthTitle).width > CW) {
+      titleSize -= 2;
+      ctx.font = titleSize + 'px ' + SHARE.DISPLAY;
+    }
+    ctx.fillText(monthTitle, M, M + 56);
     ctx.fillStyle = 'rgba(255,255,255,0.2)';
     ctx.fillRect(M, M + 78, CW, 1);
 
@@ -630,8 +625,7 @@
     var monthName = MONTH_NAMES[new Date().getMonth()];
     var stats = [
       { v: String(n), l: (n === 1 ? 'filme em ' : 'filmes em ') + monthName },
-      { v: d.monthMinutes ? formatDuration(d.monthMinutes) : '—', l: 'assistidos no mês' },
-      { v: String(d.totalCount), l: 'filmes no total' }
+      { v: d.monthMinutes ? formatDuration(d.monthMinutes) : '—', l: 'assistidos no mês' }
     ];
     stats.forEach(function (st, i) {
       var x = M + i * colW;
@@ -728,16 +722,29 @@
       }
     }
 
-    // Rodapé
+    // Rodapé: totais gerais
     ctx.fillStyle = 'rgba(255,255,255,0.16)';
     ctx.fillRect(M, footerY - 22, CW, 1);
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = '600 15px ' + SHARE.BODY;
-    ctx.fillText('Meu Arquivo', M, footerY);
-    ctx.textAlign = 'right';
-    ctx.font = '400 15px ' + SHARE.BODY;
-    ctx.fillText(d.totalMinutes ? 'tempo total: ' + formatDuration(d.totalMinutes) : '', W - M, footerY);
-    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(255,255,255,0.62)';
+    ctx.font = '400 16px ' + SHARE.BODY;
+    var lbl = 'Total de filmes: ';
+    ctx.fillText(lbl, M, footerY);
+    var lblW = ctx.measureText(lbl).width;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 16px ' + SHARE.BODY;
+    ctx.fillText(String(d.totalCount), M + lblW, footerY);
+    if (d.totalMinutes) {
+      var tv = formatDuration(d.totalMinutes);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 16px ' + SHARE.BODY;
+      ctx.fillText(tv, W - M, footerY);
+      var tvW = ctx.measureText(tv).width;
+      ctx.fillStyle = 'rgba(255,255,255,0.62)';
+      ctx.font = '400 16px ' + SHARE.BODY;
+      ctx.fillText('Tempo total: ', W - M - tvW, footerY);
+      ctx.textAlign = 'left';
+    }
 
     // Saída final: exatamente 800x800 (desenhado em 2x e reduzido para ficar nítido)
     var out = document.createElement('canvas');
