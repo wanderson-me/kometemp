@@ -587,3 +587,10 @@
 
 .tmdb-note { margin: 8px 13px 0; font-size: 0.66rem; line-height: 1.4; color: var(--sidebar-text-soft); opacity: 0.6; }
 @media (max-width: 760px) { .tmdb-note { display: none; } }
+
+/* ---- Resultado da importação ---- */
+.import-result { background: var(--paper-raised); border: 1px solid var(--line); border-left: 4px solid var(--game); border-radius: var(--radius-md); padding: 16px 18px; margin-bottom: 22px; font-size: 0.9rem; line-height: 1.55; }
+.import-result h3 { font-family: var(--font-display); font-size: 1.2rem; font-weight: normal; letter-spacing: 0.02em; margin: 0 0 6px; }
+.import-result ul { margin: 0 0 10px; padding-left: 18px; color: var(--ink-soft); }
+.import-result li b { color: var(--ink); }
+.import-result.error { border-left-color: var(--movie); }

@@ -34,7 +34,8 @@ test('gêneros são traduzidos como no restante do catálogo', () => {
 test('buildImport: novos, existentes (casados pelo tt), ignorados e nota 1-10 -> 1-5', () => {
   const existing = [{ id: 'abc123', type: 'movie', title: 'Título que eu escolhi', date: '2024-05-01', rating: 3, notes: 'minha nota', year: '', duration: 0, genres: [], imdbUrl: 'https://www.imdb.com/pt/title/tt0111161/?ref_=x', coverId: 'c.jpg', coverUrl: '/covers/c.jpg', createdAt: 1 }];
   const { items, summary } = buildImport(CSV, existing);
-  assert.deepEqual({ ...summary }, { rows: 7, movies: 3, series: 1, skippedType: 1, noId: 1, duplicates: 1 });
+  assert.deepEqual({ ...summary, skippedTypes: undefined }, { rows: 7, movies: 3, series: 1, skippedType: 1, skippedTypes: undefined, noId: 1, duplicates: 1 });
+  assert.deepEqual({ ...summary.skippedTypes }, { 'TV Episode': 1 });
   assert.equal(items.length, 4);
 
   const old = items.find((i) => i.id === 'abc123');
@@ -87,4 +88,15 @@ test('POST /api/import/imdb cria, depois atualiza sem duplicar', async () => {
     await new Promise((r) => app.server.close(r));
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('CSV com ponto e vírgula (Excel em português) também é lido; tipos ignorados são detalhados', () => {
+  const csv = 'Const;Your Rating;Title;Title Type;Genres;Runtime (mins);Year\n' +
+    'tt0000011;8;Filme A;movie;"Drama, Crime";100;2001\n' +
+    'tt0000012;7;Ep;tvEpisode;Drama;40;2002\n' +
+    'tt0000013;7;Jogo;videoGame;Action;;2003\n';
+  const { items, summary } = buildImport(csv, []);
+  assert.equal(items.length, 1);
+  assert.deepEqual(items[0].genres, ['Drama', 'Policial']);
+  assert.deepEqual({ ...summary.skippedTypes }, { tvEpisode: 1, videoGame: 1 });
 });

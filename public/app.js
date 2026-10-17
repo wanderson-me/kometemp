@@ -1153,6 +1153,39 @@
   }
   document.getElementById('covers-btn').addEventListener('click', syncCovers);
 
+  function showImportResult(r, list) {
+    var el = document.getElementById('import-result');
+    el.classList.remove('hidden');
+    el.classList.toggle('error', !!r.error);
+    if (r.error) {
+      el.innerHTML = '<h3>Não foi possível importar</h3><p>' + escapeHtml(r.error) + '</p><button type="button" class="btn-secondary" id="import-close">Fechar</button>';
+    } else {
+      var n = function (t) { return list.filter(function (e) { return e.type === t; }).length; };
+      var types = Object.keys(r.skippedTypes || {}).map(function (k) { return escapeHtml(k) + ': ' + r.skippedTypes[k]; }).join(', ');
+      var li = [
+        '<li>Linhas lidas no arquivo: <b>' + r.rows + '</b></li>',
+        '<li>Novos no catálogo: <b>' + r.created + '</b></li>',
+        '<li>Já existiam e foram atualizados: <b>' + r.updated + '</b></li>'
+      ];
+      var ign = r.duplicates + r.noId + r.skippedType + r.skipped;
+      if (ign) {
+        li.push('<li>Ignorados: <b>' + ign + '</b> (' + [
+          r.duplicates ? r.duplicates + ' repetidos no arquivo' : '',
+          r.noId ? r.noId + ' sem código do IMDb' : '',
+          r.skippedType ? r.skippedType + ' de tipo não suportado' + (types ? ' — ' + types : '') : '',
+          r.skipped ? r.skipped + ' inválidos' : ''
+        ].filter(Boolean).join(', ') + ')</li>');
+      }
+      el.innerHTML = '<h3>Importação do IMDb concluída</h3><ul>' + li.join('') + '</ul>' +
+        '<p>Agora o catálogo tem <b>' + n('movie') + ' filmes</b>, <b>' + n('series') + ' séries</b> e <b>' + n('game') + ' jogos</b>.</p>' +
+        '<button type="button" class="btn-secondary" id="import-close">Fechar</button>';
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  document.getElementById('import-result').addEventListener('click', function (e) {
+    if (e.target.closest('#import-close')) this.classList.add('hidden');
+  });
+
   var coversEnabled = false;
   document.getElementById('imdb-import-btn').addEventListener('click', function () {
     var input = document.createElement('input');
@@ -1169,14 +1202,11 @@
         return api('GET', '/api/entries').then(function (list) {
           entries = list;
           render();
-          var msg = r.created + ' novos, ' + r.updated + ' atualizados';
-          var skipped = r.skippedType + r.noId + r.duplicates + r.skipped;
-          if (skipped) msg += ', ' + skipped + ' ignorados';
-          showToast('Importação concluída: ' + msg + '.');
+          showImportResult(r, list);
           if (coversEnabled && r.created) syncCovers();
         });
       }).catch(function (err) {
-        showToast('Não foi possível importar: ' + err.message);
+        showImportResult({ error: err.message });
       }).then(function () {
         btn.disabled = false;
         btn.textContent = label;
