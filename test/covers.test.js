@@ -18,11 +18,29 @@ before(async () => {
     tmdbCalls.push(u.pathname + u.search);
     if (u.pathname.startsWith('/img/')) { res.writeHead(200, { 'content-type': 'image/jpeg' }); return res.end(JPEG); }
     if (u.searchParams.get('api_key') !== 'k'.repeat(32)) { res.writeHead(401); return res.end('{}'); }
+    const det = u.pathname.match(/\/(movie|tv)\/(\d+)$/);
+    if (det) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      if (det[1] === 'movie' && det[2] === '101') {
+        return res.end(JSON.stringify({
+          title: 'Filme Um', original_title: 'Movie One', tagline: 'Uma frase.', overview: 'Sinopse em português.', release_date: '1999-03-31', runtime: 136,
+          genres: [{ name: 'Ação' }, { name: 'Ficção científica' }], vote_average: 8.236,
+          credits: { cast: [{ name: 'Ator Um', character: 'Herói' }, { name: 'Atriz Dois', character: 'Vilã' }], crew: [{ job: 'Producer', name: 'Não é diretor' }, { job: 'Director', name: 'Diretor Um' }] },
+          'watch/providers': { results: { BR: { link: 'https://www.themoviedb.org/movie/101/watch?locale=BR', flatrate: [{ provider_name: 'Netflix' }], rent: [{ provider_name: 'Apple TV' }] }, US: { flatrate: [{ provider_name: 'Hulu' }] } } }
+        }));
+      }
+      if (det[1] === 'tv' && det[2] === '303') {
+        const pt = u.searchParams.get('language') === 'pt-BR';
+        return res.end(JSON.stringify({ name: 'Série Três', overview: pt ? '' : 'English overview.', tagline: '', first_air_date: '2010-01-01', number_of_seasons: 3, number_of_episodes: 30,
+          created_by: [{ name: 'Criador Um' }], genres: [{ name: 'Drama' }], credits: { cast: [{ name: 'Ator Três', character: '' }] }, 'watch/providers': { results: {} } }));
+      }
+      res.writeHead(404); return res.end('{}');
+    }
     const id = u.pathname.split('/').pop();
     const out = { movie_results: [], tv_results: [] };
-    if (id === 'tt0000001') out.movie_results.push({ poster_path: '/a.jpg' });
-    if (id === 'tt0000002') out.movie_results.push({ poster_path: null });
-    if (id === 'tt0000003') out.tv_results.push({ poster_path: '/s.jpg' });
+    if (id === 'tt0000001') out.movie_results.push({ id: 101, poster_path: '/a.jpg' });
+    if (id === 'tt0000002') out.movie_results.push({ id: 102, poster_path: null });
+    if (id === 'tt0000003') out.tv_results.push({ id: 303, poster_path: '/s.jpg' });
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify(out));
   });
@@ -128,4 +146,55 @@ test('sem TMDB_API_KEY a busca fica desativada (503) e o app segue normal', asyn
   assert.equal(c.status, 201);
   await new Promise((r) => app.server.close(r));
   fs.rmSync(dir3, { recursive: true, force: true });
+});
+
+
+test('detalhes: sinopse, direção, elenco e onde assistir (só Brasil), com cache', async () => {
+  const c = await api('POST', '/api/entries', { type: 'movie', title: 'Meu filme', imdbUrl: 'https://www.imdb.com/title/tt0000001/' });
+  const before = tmdbCalls.filter((x) => x.includes('/movie/101')).length;
+  const r = await api('GET', '/api/entries/' + c.data.id + '/details');
+  assert.equal(r.status, 200);
+  assert.equal(r.data.kind, 'movie');
+  assert.equal(r.data.overview, 'Sinopse em português.');
+  assert.equal(r.data.tagline, 'Uma frase.');
+  assert.deepEqual(r.data.directors, ['Diretor Um']);
+  assert.equal(r.data.cast[0].name, 'Ator Um');
+  assert.equal(r.data.cast[0].character, 'Herói');
+  assert.equal(r.data.runtime, 136);
+  assert.equal(r.data.voteAverage, 8.2);
+  assert.deepEqual(r.data.genres, ['Ação', 'Ficção científica']);
+  assert.deepEqual(r.data.providers.flatrate, ['Netflix']);   // US/Hulu fica de fora
+  assert.deepEqual(r.data.providers.rent, ['Apple TV']);
+  assert.equal(r.data.tmdbUrl, 'https://www.themoviedb.org/movie/101');
+  assert.equal(tmdbCalls.filter((x) => x.includes('/movie/101')).length, before + 1);
+  const again = await api('GET', '/api/entries/' + c.data.id + '/details');   // segunda vez vem do cache
+  assert.equal(again.status, 200);
+  assert.equal(again.data.overview, 'Sinopse em português.');
+  assert.equal(tmdbCalls.filter((x) => x.includes('/movie/101')).length, before + 1);
+});
+
+test('detalhes de série: criação, temporadas e sinopse em inglês quando falta em português', async () => {
+  const c = await api('POST', '/api/entries', { type: 'series', title: 'Minha série', imdbUrl: 'tt0000003' });
+  const r = await api('GET', '/api/entries/' + c.data.id + '/details');
+  assert.equal(r.status, 200);
+  assert.equal(r.data.kind, 'tv');
+  assert.equal(r.data.overview, 'English overview.');
+  assert.deepEqual(r.data.directors, ['Criador Um']);
+  assert.equal(r.data.seasons, 3);
+  assert.equal(r.data.episodes, 30);
+  assert.equal(r.data.providers, null);
+});
+
+test('detalhes: erros claros (sem IMDb, não encontrado, registro inexistente)', async () => {
+  const a = await api('POST', '/api/entries', { type: 'movie', title: 'Sem código' });
+  const ra = await api('GET', '/api/entries/' + a.data.id + '/details');
+  assert.equal(ra.status, 404);
+  assert.match(ra.data.error, /código do IMDb/);
+  const b = await api('POST', '/api/entries', { type: 'movie', title: 'Desconhecido', imdbUrl: 'tt9999998' });
+  const rb = await api('GET', '/api/entries/' + b.data.id + '/details');
+  assert.equal(rb.status, 404);
+  assert.match(rb.data.error, /TMDB não encontrou/);
+  assert.equal((await api('GET', '/api/entries/naoexiste/details')).status, 404);
+  const anon = await fetch(base + '/api/entries/' + a.data.id + '/details');   // sem login
+  assert.equal(anon.status, 401);
 });

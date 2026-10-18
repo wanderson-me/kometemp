@@ -113,6 +113,8 @@ O app pode buscar o pôster de cada filme/série pelo código do IMDb que você 
 3. No servidor: `echo 'TMDB_API_KEY=sua-chave' >> /etc/meu-arquivo.env && systemctl restart meu-arquivo`.
 4. No app, clique em **Buscar capas** na barra lateral. Ele preenche as capas que faltam (leva alguns minutos para ~600 itens). Daí em diante, todo registro novo com link do IMDb ganha a capa sozinho.
 
+A mesma chave alimenta a **tela de detalhes**: ao tocar num cartão, o app mostra sinopse, direção (ou criação), elenco e onde assistir no Brasil. Os dados ficam em cache por 7 dias na pasta `details/` dos dados, então cada título é consultado poucas vezes. A informação de streaming vem do JustWatch, via TMDB.
+
 O servidor precisa alcançar `api.themoviedb.org` e `image.tmdb.org`. Capas que você enviou manualmente nunca são substituídas. Os dados de imagem vêm do TMDB; o app mostra o aviso de atribuição exigido por eles.
 
 ## Backup e restauração

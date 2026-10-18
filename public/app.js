@@ -264,7 +264,7 @@
       }
       return '' +
         '<article class="card type-' + e.type + '" data-id="' + e.id + '">' +
-          '<div class="poster">' +
+          '<div class="poster" tabindex="0" title="Ver detalhes">' +
             posterInner +
             '<div class="poster-top">' + statusBadge + ratingBadge + '</div>' +
             '<div class="poster-actions">' +
@@ -1080,6 +1080,129 @@
     return raw;
   }
 
+  // ---- Detalhes do filme/série (sinopse, elenco, onde assistir via TMDB) ----
+  var detailCache = {};
+
+  function detailRow(label, html) {
+    return html ? '<section class="detail-row"><h4>' + label + '</h4>' + html + '</section>' : '';
+  }
+
+  function detailExtraHtml(d) {
+    var out = '';
+    if (d.tagline) out += '<p class="detail-tagline">“' + escapeHtml(d.tagline) + '”</p>';
+    out += detailRow('Sinopse', d.overview ? '<p>' + escapeHtml(d.overview) + '</p>' : '<p class="detail-muted">Sem sinopse disponível.</p>');
+    if (d.originalTitle && d.title && d.originalTitle !== d.title) {
+      out += detailRow('Título original', '<p>' + escapeHtml(d.originalTitle) + '</p>');
+    }
+    if (d.directors && d.directors.length) {
+      out += detailRow(d.kind === 'tv' ? 'Criação' : 'Direção', '<p>' + d.directors.map(escapeHtml).join(', ') + '</p>');
+    }
+    if (d.cast && d.cast.length) {
+      out += detailRow('Elenco', '<ul class="detail-cast">' + d.cast.map(function (c) {
+        return '<li><b>' + escapeHtml(c.name) + '</b>' + (c.character ? '<span>' + escapeHtml(c.character) + '</span>' : '') + '</li>';
+      }).join('') + '</ul>');
+    }
+    var pv = d.providers;
+    var pvHtml = '';
+    if (pv) {
+      [['flatrate', 'Streaming'], ['rent', 'Aluguel'], ['buy', 'Compra']].forEach(function (g) {
+        if (pv[g[0]] && pv[g[0]].length) {
+          pvHtml += '<p><span class="detail-chip-label">' + g[1] + '</span> ' + pv[g[0]].map(escapeHtml).join(', ') + '</p>';
+        }
+      });
+    }
+    out += detailRow('Onde assistir (Brasil)', (pvHtml || '<p class="detail-muted">Sem informação de streaming para o Brasil.</p>') +
+      '<p class="detail-attrib">Dados de streaming: JustWatch, via TMDB.</p>');
+    return out;
+  }
+
+  function loadDetails(entry, panel) {
+    var box = panel.querySelector('#detail-extra');
+    if (!entry.imdbUrl) {
+      box.innerHTML = '<p class="detail-muted">Adicione o link ou o código do IMDb a este registro para ver sinopse, elenco e onde assistir.</p>';
+      return;
+    }
+    if (!coversEnabled) {
+      box.innerHTML = '<p class="detail-muted">Para ver sinopse, elenco e onde assistir, ative o TMDB no servidor (TMDB_API_KEY).</p>';
+      return;
+    }
+    var apply = function (d) {
+      if (!panel.open || panel.dataset.id !== entry.id) return;
+      box.innerHTML = detailExtraHtml(d);
+      var score = panel.querySelector('#detail-tmdb-score');
+      if (score && d.voteAverage) { score.textContent = 'TMDB ' + String(d.voteAverage).replace('.', ','); score.classList.remove('hidden'); }
+      var link = panel.querySelector('#detail-tmdb-link');
+      if (link && /^https:\/\/www\.themoviedb\.org\//.test(d.tmdbUrl || '')) { link.href = d.tmdbUrl; link.classList.remove('hidden'); }
+    };
+    if (detailCache[entry.id]) { apply(detailCache[entry.id]); return; }
+    api('GET', '/api/entries/' + encodeURIComponent(entry.id) + '/details').then(function (d) {
+      detailCache[entry.id] = d;
+      apply(d);
+    }).catch(function (err) {
+      if (!panel.open || panel.dataset.id !== entry.id) return;
+      box.innerHTML = '<p class="detail-muted">' + escapeHtml(err.message) + '</p>';
+    });
+  }
+
+  function openDetail(entry) {
+    var panel = document.getElementById('detail-panel');
+    panel.dataset.id = entry.id;
+    var meta = metaLine(entry);
+    if (entry.date) meta += (meta ? ' · ' : '') + (entry.type === 'movie' ? 'assistido em ' : 'atualizado em ') + formatDate(entry.date);
+    var poster = entry.coverUrl
+      ? '<div class="detail-poster" style="background-image:url(&quot;' + escapeHtml(entry.coverUrl) + '&quot;)"></div>'
+      : '<div class="detail-poster poster-placeholder" style="' + posterPlaceholder(entry) + '"><span class="poster-initial">' + escapeHtml((entry.title || '?').trim().charAt(0).toUpperCase()) + '</span></div>';
+    var genres = (entry.genres || []).map(function (g) { return '<span class="genre-tag">' + escapeHtml(g) + '</span>'; }).join('');
+    var imdbOk = /^https?:\/\//i.test(entry.imdbUrl || '');
+    panel.innerHTML =
+      '<div class="modal-head">' +
+        '<h2 id="detail-title">' + escapeHtml(entry.title) + '</h2>' +
+        '<button type="button" class="modal-x" data-detail="close" aria-label="Fechar">✕</button>' +
+      '</div>' +
+      '<div class="detail-top">' + poster +
+        '<div class="detail-info">' +
+          (meta ? '<p class="detail-meta">' + meta + '</p>' : '') +
+          (genres ? '<div class="genre-tags">' + genres + '</div>' : '') +
+          '<p class="detail-scores">' +
+            (entry.rating ? '<span class="detail-score">★ ' + formatRating(entry.rating) + '<small>/10</small></span><span class="detail-score-label">sua nota</span>' : '<span class="detail-muted">Sem nota</span>') +
+            '<span class="detail-chip hidden" id="detail-tmdb-score"></span>' +
+          '</p>' +
+        '</div>' +
+      '</div>' +
+      '<div id="detail-extra"><p class="detail-muted">Carregando detalhes…</p></div>' +
+      (entry.notes ? detailRow('Minhas anotações', '<p class="detail-notes">' + escapeHtml(entry.notes) + '</p>') : '') +
+      '<div class="detail-actions">' +
+        '<button type="button" class="btn-secondary" data-detail="edit">Editar</button>' +
+        (imdbOk ? '<a class="btn-secondary" href="' + escapeHtml(entry.imdbUrl) + '" target="_blank" rel="noopener">IMDb ↗</a>' : '') +
+        '<a class="btn-secondary hidden" id="detail-tmdb-link" href="#" target="_blank" rel="noopener">TMDB ↗</a>' +
+        '<button type="button" class="btn-primary" data-detail="close">Fechar</button>' +
+      '</div>';
+    if (!panel.open) panel.showModal();
+    panel.scrollTop = 0;
+    loadDetails(entry, panel);
+  }
+
+  function closeDetail() {
+    var panel = document.getElementById('detail-panel');
+    if (panel.open) panel.close();
+  }
+
+  (function () {
+    var panel = document.getElementById('detail-panel');
+    panel.addEventListener('close', function () { panel.innerHTML = ''; panel.dataset.id = ''; });
+    panel.addEventListener('click', function (e) {
+      if (e.target === panel) { closeDetail(); return; } // clique no fundo escurecido
+      var b = e.target.closest('[data-detail]');
+      if (!b) return;
+      if (b.dataset.detail === 'close') closeDetail();
+      if (b.dataset.detail === 'edit') {
+        var entry = entries.find(function (x) { return x.id === panel.dataset.id; });
+        closeDetail();
+        if (entry) openForm(entry);
+      }
+    });
+  })();
+
   async function saveForm(type) {
     var form = document.getElementById('entry-form');
     var submitBtn = form.querySelector('button[type="submit"]');
@@ -1231,16 +1354,30 @@
 
   document.getElementById('list').addEventListener('click', function (e) {
     var btn = e.target.closest('[data-action]');
-    if (!btn) return;
     var card = e.target.closest('.card');
+    if (!card) return;
     var id = card.dataset.id;
     var entry = entries.find(function (x) { return x.id === id; });
     if (!entry) return;
+    if (!btn) {
+      if (e.target.closest('a')) return; // o link do IMDb abre sozinho
+      openDetail(entry);
+      return;
+    }
     if (btn.dataset.action === 'edit') {
       openForm(entry);
     } else if (btn.dataset.action === 'delete') {
       if (confirm('Excluir "' + entry.title + '"?')) deleteEntry(id);
     }
+  });
+
+  // Teclado: Enter ou Espaço no pôster abre os detalhes.
+  document.getElementById('list').addEventListener('keydown', function (e) {
+    if ((e.key !== 'Enter' && e.key !== ' ') || !e.target.classList.contains('poster')) return;
+    e.preventDefault();
+    var card = e.target.closest('.card');
+    var entry = card && entries.find(function (x) { return x.id === card.dataset.id; });
+    if (entry) openDetail(entry);
   });
 
   document.getElementById('logo-btn').addEventListener('click', pickLogo);

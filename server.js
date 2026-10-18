@@ -308,6 +308,28 @@ function createApp(cfg) {
       return json(req, res, 200, store.importMany(items));
     }
 
+    const dm = p.match(/^\/api\/entries\/([A-Za-z0-9_-]{1,40})\/details$/);
+    if (dm && method === 'GET') {
+      const entry = store.get(dm[1]);
+      if (!entry) return json(req, res, 404, { error: 'Registro não encontrado.' });
+      if (!tmdb) return json(req, res, 503, { error: 'Detalhes indisponíveis. Defina TMDB_API_KEY no servidor.' });
+      const tt = imdbId(entry.imdbUrl);
+      if (!tt) return json(req, res, 404, { error: 'Este registro não tem o código do IMDb.' });
+      const cacheFile = path.join(cfg.dataDir, 'details', tt + '.json');
+      try { // cache de 7 dias: evita repetir a consulta e mantém a tela rápida
+        const c = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+        if (c && c.fetchedAt > Date.now() - 7 * 24 * 3600 * 1000 && c.data) return json(req, res, 200, c.data);
+      } catch (_) { /* sem cache */ }
+      let data;
+      try { data = await tmdb.detailsFor(entry); } catch (err) { return json(req, res, 502, { error: 'Não foi possível consultar o TMDB: ' + err.message }); }
+      if (!data) return json(req, res, 404, { error: 'O TMDB não encontrou este título.' });
+      try {
+        fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+        fs.writeFileSync(cacheFile, JSON.stringify({ fetchedAt: Date.now(), data }));
+      } catch (_) { /* cache é opcional */ }
+      return json(req, res, 200, data);
+    }
+
     const m = p.match(/^\/api\/entries\/([A-Za-z0-9_-]{1,40})(\/cover)?$/);
     if (m) {
       const id = m[1];
