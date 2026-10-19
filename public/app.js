@@ -327,21 +327,32 @@
 
   function getRecapData() {
     var movies = entries.filter(function (e) { return e.type === 'movie'; });
-    var totalCount = movies.length;
-    var totalMinutes = movies.reduce(function (s, e) { return s + (parseInt(e.duration, 10) || 0); }, 0);
+    var series = entries.filter(function (e) { return e.type === 'series'; });
+    var sum = function (list, k) { return list.reduce(function (s, e) { return s + (parseInt(e[k], 10) || 0); }, 0); };
     var now = new Date();
-    var monthLabel = MONTH_NAMES[now.getMonth()] + ' de ' + now.getFullYear();
-    var monthMovies = movies.filter(function (e) { return isSameMonth(e.date); });
-    monthMovies.sort(function (a, b) { return (a.date || '').localeCompare(b.date || ''); });
-    var monthMinutes = monthMovies.reduce(function (s, e) { return s + (parseInt(e.duration, 10) || 0); }, 0);
-    var topMovie = null;
-    monthMovies.forEach(function (e) {
-      var r = num(e.rating);
-      if (r > 0 && (!topMovie || r > num(topMovie.rating))) {
-        topMovie = e;
-      }
-    });
-    return { totalCount: totalCount, totalMinutes: totalMinutes, monthLabel: monthLabel, monthMovies: monthMovies, monthMinutes: monthMinutes, topMovie: topMovie };
+    var byDate = function (a, b) { return (a.date || '').localeCompare(b.date || ''); };
+    var monthMovies = movies.filter(function (e) { return isSameMonth(e.date); }).sort(byDate);
+    var monthSeries = series.filter(function (e) { return isSameMonth(e.date); }).sort(byDate);
+    var best = function (list) {
+      var top = null;
+      list.forEach(function (e) { if (num(e.rating) > 0 && (!top || num(e.rating) > num(top.rating))) top = e; });
+      return top;
+    };
+    return {
+      monthLabel: MONTH_NAMES[now.getMonth()] + ' de ' + now.getFullYear(),
+      monthName: MONTH_NAMES[now.getMonth()],
+      totalMovies: movies.length,
+      totalSeries: series.length,
+      movieMinutes: sum(movies, 'duration'),
+      seriesMinutes: sum(series, 'duration'),
+      totalEpisodes: sum(series, 'episodes'),
+      monthMovies: monthMovies,
+      monthSeries: monthSeries,
+      monthItems: monthMovies.concat(monthSeries).sort(byDate),
+      monthMinutes: sum(monthMovies, 'duration'),
+      topMovie: best(monthMovies),
+      topSeries: best(monthSeries)
+    };
   }
 
   function canShareFiles() {
@@ -351,55 +362,22 @@
     } catch (err) { return false; }
   }
 
-  function renderMovieRecap() {
-    var el = document.getElementById('movie-recap');
-    if (state.activeTab !== 'movie') {
-      el.classList.add('hidden');
-      el.innerHTML = '';
-      return;
-    }
-    var d = getRecapData();
-    var listHtml = d.monthMovies.length ? d.monthMovies.map(function (e) {
-      var genresStr = (e.genres && e.genres.length) ? e.genres.join(', ') : '';
-      return '<div class="recap-item">' +
-        '<span class="recap-item-title">' + escapeHtml(e.title) + '</span>' +
-        (genresStr ? '<span class="recap-item-genre">' + escapeHtml(genresStr) + '</span>' : '') +
-      '</div>';
-    }).join('') : '<div class="recap-empty">Nenhum filme registrado este mês ainda.</div>';
+  // A tela Compartilhar: mostra a própria imagem que será baixada (assim o que se vê é o que se posta).
+  var sharePreviewToken = 0;
+  var sharePreviewUrl = null;
 
-    var spotlightHtml = '';
-    if (d.topMovie) {
-      var tm = d.topMovie;
-      var tmGenres = (tm.genres && tm.genres.length) ? tm.genres.join(', ') : '';
-      var tmCover = tm.coverUrl ? '<div class="recap-spotlight-cover" style="background-image:url(&quot;' + escapeHtml(tm.coverUrl) + '&quot;)"></div>' : '';
-      spotlightHtml =
-        '<div class="recap-spotlight">' +
-          tmCover +
-          '<div class="recap-spotlight-body">' +
-            '<div class="recap-spotlight-label">⭐ Filme do mês</div>' +
-            '<div class="recap-spotlight-title">' + escapeHtml(tm.title) + '</div>' +
-            '<div class="recap-spotlight-stars">★ ' + formatRating(tm.rating) + '<small>/10</small></div>' +
-            (tmGenres ? '<div class="recap-spotlight-genre">' + escapeHtml(tmGenres) + '</div>' : '') +
-          '</div>' +
-        '</div>';
-    }
-
-    el.classList.remove('hidden');
+  function renderShare() {
+    var el = document.getElementById('share-view');
+    var on = state.activeTab === 'share';
+    document.body.classList.toggle('view-share', on);
+    el.classList.toggle('hidden', !on);
+    if (!on) return;
+    var FMT = SHARE_FORMATS[shareFormat] || SHARE_FORMATS.square;
     el.innerHTML =
-      '<div class="recap-card" id="recap-card">' +
-        '<div class="recap-header"><span class="recap-emoji">🎬</span><div><h2>Meu registro</h2><span class="recap-month">' + escapeHtml(d.monthLabel) + '</span></div></div>' +
-        '<div class="recap-totals">' +
-          '<div class="recap-stat"><b>' + d.totalCount + '</b><span>filmes assistidos</span></div>' +
-          '<div class="recap-stat"><b>' + formatDuration(d.totalMinutes) + '</b><span>tempo total consumido</span></div>' +
-        '</div>' +
-        spotlightHtml +
-        '<div class="recap-month-highlight">' +
-          '<div class="recap-month-head"><h3>Este mês</h3><span>' + d.monthMovies.length + (d.monthMovies.length === 1 ? ' filme' : ' filmes') + (d.monthMinutes ? ' · ' + formatDuration(d.monthMinutes) : '') + '</span></div>' +
-          '<div class="recap-list">' + listHtml + '</div>' +
-        '</div>' +
-      '</div>' +
+      '<div class="share-head"><h2>Compartilhar</h2>' +
+        '<p>Resumo de ' + escapeHtml(getRecapData().monthLabel) + ' com o total de filmes e séries e o que foi assistido no mês.</p></div>' +
+      '<div class="share-stage"><img id="share-preview-img" class="share-preview" width="800" height="' + FMT.H + '" alt="Prévia da imagem para compartilhar" style="aspect-ratio:800/' + FMT.H + '"></div>' +
       '<div class="recap-actions">' +
-        '<button type="button" class="btn-secondary" id="recap-copy-btn">Copiar texto</button>' +
         '<div class="seg" role="group" aria-label="Formato da imagem">' +
           Object.keys(SHARE_FORMATS).map(function (k) {
             return '<button type="button" class="seg-btn' + (k === shareFormat ? ' on' : '') + '" data-fmt="' + k + '" aria-pressed="' + (k === shareFormat) + '">' + SHARE_FORMATS[k].label + '</button>';
@@ -407,30 +385,45 @@
         '</div>' +
         '<button type="button" class="btn-add" id="recap-image-btn">Baixar imagem</button>' +
         (canShareFiles() ? '<button type="button" class="btn-secondary" id="recap-share-btn">Compartilhar</button>' : '') +
+        '<button type="button" class="btn-secondary" id="recap-copy-btn">Copiar texto</button>' +
         '<button type="button" class="btn-secondary" id="recap-bg-btn">' + (shareBgVersion ? 'Trocar fundo' : 'Escolher fundo') + '</button>' +
         (shareBgVersion ? '<button type="button" class="btn-secondary" id="recap-bg-remove">Remover fundo</button>' : '') +
       '</div>';
+    refreshSharePreview();
+  }
+
+  function refreshSharePreview() {
+    var img = document.getElementById('share-preview-img');
+    if (!img || state.activeTab !== 'share') return;
+    var token = ++sharePreviewToken;
+    img.classList.add('loading');
+    buildShareImage().then(function (blob) {
+      if (token !== sharePreviewToken || !blob) return;
+      var url = URL.createObjectURL(blob);
+      img.onload = function () { img.classList.remove('loading'); };
+      img.src = url;
+      if (sharePreviewUrl) URL.revokeObjectURL(sharePreviewUrl);
+      sharePreviewUrl = url;
+    }).catch(function () { img.classList.remove('loading'); });
   }
 
   function buildRecapText() {
     var d = getRecapData();
     var lines = [];
-    lines.push('🎬 Meu registro — ' + d.monthLabel);
+    var cap = d.monthName.charAt(0).toUpperCase() + d.monthName.slice(1);
+    lines.push('🎬 WAndCine — ' + d.monthLabel);
     lines.push('');
-    lines.push(d.totalCount + ' filmes assistidos no total (' + formatDuration(d.totalMinutes) + ')');
-    if (d.topMovie) {
-      lines.push('');
-      lines.push('⭐ Filme do mês: ' + d.topMovie.title + ' (' + formatRating(d.topMovie.rating) + '/10)');
-    }
+    lines.push('Total: ' + d.totalMovies + ' filmes · ' + d.totalSeries + ' séries' + (d.totalEpisodes ? ' · ' + d.totalEpisodes.toLocaleString('pt-BR') + ' episódios' : ''));
     lines.push('');
-    lines.push('Este mês (' + d.monthMovies.length + '):');
-    if (!d.monthMovies.length) {
-      lines.push('Nenhum filme registrado este mês ainda.');
+    lines.push(cap + ': ' + d.monthMovies.length + (d.monthMovies.length === 1 ? ' filme' : ' filmes') + (d.monthMinutes ? ' (' + formatDuration(d.monthMinutes) + ')' : '') +
+      ' · ' + d.monthSeries.length + (d.monthSeries.length === 1 ? ' série' : ' séries'));
+    if (d.topMovie) lines.push('⭐ Filme do mês: ' + d.topMovie.title + ' (' + formatRating(d.topMovie.rating) + '/10)');
+    if (d.topSeries) lines.push('⭐ Série do mês: ' + d.topSeries.title + ' (' + formatRating(d.topSeries.rating) + '/10)');
+    if (!d.monthItems.length) {
+      lines.push('', 'Nada registrado este mês ainda.');
     } else {
-      d.monthMovies.forEach(function (e) {
-        var genresStr = (e.genres && e.genres.length) ? ' — ' + e.genres.join(', ') : '';
-        lines.push('• ' + e.title + genresStr);
-      });
+      if (d.monthMovies.length) { lines.push('', 'Filmes:'); d.monthMovies.forEach(function (e) { lines.push('• ' + e.title); }); }
+      if (d.monthSeries.length) { lines.push('', 'Séries:'); d.monthSeries.forEach(function (e) { lines.push('• ' + e.title); }); }
     }
     return lines.join('\n');
   }
@@ -554,6 +547,67 @@
     ctx.restore();
   }
 
+  // Destaque do mês (filme ou série): pôster à esquerda, título, nota e gêneros à direita.
+  function drawHero(ctx, entry, img, label, x0, y0, boxW, hh, titleSizes) {
+    var hw = Math.round(hh / 1.5);
+    var boxH = hh + 28;
+    ctx.save();
+    roundRectPath(ctx, x0, y0, boxW, boxH, 16);
+    var hg = ctx.createLinearGradient(x0, y0, x0 + boxW, y0 + boxH);
+    hg.addColorStop(0, 'rgba(185,132,42,0.26)');
+    hg.addColorStop(1, 'rgba(185,132,42,0.05)');
+    ctx.fillStyle = hg;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(185,132,42,0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+
+    drawPoster(ctx, entry, img, x0 + 14, y0 + 14, hw, hh, 8);
+
+    var gap = boxW > 500 ? 26 : 16;
+    var tx = x0 + 14 + hw + gap;
+    var tw = x0 + boxW - 16 - tx;
+    ctx.fillStyle = SHARE.STAR;
+    ctx.font = '600 ' + (boxW > 500 ? 17 : 15) + 'px ' + SHARE.BODY;
+    ctx.fillText(label, tx, y0 + 14 + 20);
+
+    // O título maior que cabe: no máximo 2 (largo) ou 3 (estreito) linhas e ainda sobra espaço para a nota.
+    var maxLines = boxW > 500 ? 2 : 3;
+    var availText = boxH - 54 - 12 - 36;
+    var t = null;
+    for (var si = 0; si < titleSizes.length && !t; si++) {
+      ctx.font = titleSizes[si] + 'px ' + SHARE.DISPLAY;
+      var tl = wrapLines(ctx, entry.title, tw);
+      if (tl.length <= maxLines && tl.length * titleSizes[si] * 0.98 <= availText) t = { size: titleSizes[si], lines: tl };
+    }
+    if (!t) t = fitText(ctx, entry.title, SHARE.DISPLAY, '', [titleSizes[titleSizes.length - 1]], tw, maxLines);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = t.size + 'px ' + SHARE.DISPLAY;
+    var ty = y0 + 14 + 20 + 10 + t.size * 0.9;
+    t.lines.forEach(function (ln, i) { ctx.fillText(ln, tx, ty + i * t.size * 0.98); });
+    var after = ty + (t.lines.length - 1) * t.size * 0.98 + 26;
+
+    drawStar(ctx, tx + 12, after, 12, SHARE.STAR);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 ' + (boxW > 500 ? 26 : 22) + 'px ' + SHARE.BODY;
+    var scoreTxt = formatRating(entry.rating);
+    ctx.fillText(scoreTxt, tx + 32, after + 8);
+    var scoreW = ctx.measureText(scoreTxt).width;
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = '400 16px ' + SHARE.BODY;
+    ctx.fillText('/10', tx + 32 + scoreW + 3, after + 8);
+    var gtxt = (entry.genres && entry.genres.length) ? entry.genres.join(', ') : '';
+    var maxG = boxW > 500 ? 2 : 2;
+    if (gtxt && after + 30 + 16 < y0 + boxH) {
+      var gl = fitText(ctx, gtxt, SHARE.BODY, '400', boxW > 500 ? [18, 16] : [15, 13], tw, maxG);
+      ctx.fillStyle = 'rgba(255,255,255,0.68)';
+      ctx.font = '400 ' + gl.size + 'px ' + SHARE.BODY;
+      gl.lines.forEach(function (ln, i) { ctx.fillText(ln, tx, after + 32 + i * (gl.size + 5)); });
+    }
+    return boxH;
+  }
+
   async function buildShareImage() {
     var d = getRecapData();
     var FMT = SHARE_FORMATS[shareFormat] || SHARE_FORMATS.square;
@@ -566,20 +620,23 @@
       ]);
     } catch (err) { /* usa as fontes de reserva */ }
 
-    var n = d.monthMovies.length;
-    var top = d.topMovie;
-    var hasHero = !!top;
+    var n = d.monthItems.length;
+    var heroes = [];
+    if (d.topMovie) heroes.push({ e: d.topMovie, label: 'Filme do mês' });
+    if (d.topSeries) heroes.push({ e: d.topSeries, label: 'Série do mês' });
+    var twoUp = heroes.length === 2;
+    var HERO_H = twoUp ? Math.round(FMT.heroH * 0.78) : FMT.heroH;
+    var HERO_BOX = HERO_H + 28;
 
-    // Layout da faixa de pôsteres: o maior tamanho em que todos cabem (até 3 linhas)
-    var HERO_H = FMT.heroH;
-    var headBottom = M + 78 + 24 + 74 + 28;           // fim do cabeçalho + números
-    var regionTop = headBottom + (hasHero ? HERO_H + 28 + 26 : 0);
+    // Layout da faixa de pôsteres: o maior tamanho em que todos cabem
+    var headBottom = M + 78 + 24 + 96 + 24;           // fim do cabeçalho + números do mês
+    var regionTop = headBottom + (heroes.length ? HERO_BOX + 26 : 0);
     var footerY = H - M + 4;
     var regionBottom = footerY - 34;
     var gridTop = regionTop + 36;
     var availH = regionBottom - gridTop;
     var tileW = 48, perRow = 1, rows = 1, overflow = 0;
-    var shown = d.monthMovies;
+    var shown = d.monthItems;
     var fitted = false;
     for (var tw0 = FMT.maxTile; tw0 >= 48 && !fitted; tw0--) {
       var th0 = Math.round(tw0 * 1.5);
@@ -594,16 +651,17 @@
       perRow = Math.floor((CW + 8) / (tileW + 8));
       rows = Math.max(1, Math.min(FMT.maxRows, Math.floor((availH + 8) / (Math.round(tileW * 1.5) + 8))));
       var cap = perRow * rows;
-      shown = d.monthMovies.slice(0, cap - 1);
+      shown = d.monthItems.slice(0, cap - 1);
       overflow = n - shown.length;
     }
     var tileH = Math.round(tileW * 1.5);
 
-    var imgs = await Promise.all([loadImage(top && top.coverUrl), loadImage(shareBgVersion ? '/share-bg?v=' + shareBgVersion : null)]
+    var imgs = await Promise.all([loadImage(shareBgVersion ? '/share-bg?v=' + shareBgVersion : null)]
+      .concat(heroes.map(function (h) { return loadImage(h.e.coverUrl); }))
       .concat(shown.map(function (e) { return loadImage(e.coverUrl); })));
-    var topImg = imgs[0];
-    var bgImg = imgs[1];
-    imgs.splice(1, 1); // deixa imgs[i + 1] = pôster de shown[i]
+    var bgImg = imgs[0];
+    var heroImgs = imgs.slice(1, 1 + heroes.length);
+    var tileImgs = imgs.slice(1 + heroes.length);
 
     var S = 2;
     var big = document.createElement('canvas');
@@ -640,7 +698,7 @@
       ctx.fillRect(0, 0, W, H);
     }
 
-    // Título: apenas mês e ano
+    // Título: mês e ano
     var monthTitle = d.monthLabel.charAt(0).toUpperCase() + d.monthLabel.slice(1);
     ctx.fillStyle = SHARE.GOLD;
     var titleSize = 78;
@@ -653,13 +711,14 @@
     ctx.fillStyle = 'rgba(255,255,255,0.2)';
     ctx.fillRect(M, M + 78, CW, 1);
 
-    // Números do mês
+    // Números: assistidos no mês, com o total do catálogo logo abaixo
     var statsY = M + 78 + 24;
     var colW = CW / 3;
-    var monthName = MONTH_NAMES[new Date().getMonth()];
+    var allMinutes = d.movieMinutes + d.seriesMinutes;
     var stats = [
-      { v: String(n), l: (n === 1 ? 'filme em ' : 'filmes em ') + monthName },
-      { v: d.monthMinutes ? formatDuration(d.monthMinutes) : '—', l: 'assistidos no mês' }
+      { v: String(d.monthMovies.length), l: (d.monthMovies.length === 1 ? 'filme em ' : 'filmes em ') + d.monthName, s: d.totalMovies + ' no total' },
+      { v: String(d.monthSeries.length), l: (d.monthSeries.length === 1 ? 'série em ' : 'séries em ') + d.monthName, s: d.totalSeries + ' no total' },
+      { v: d.monthMinutes ? formatDuration(d.monthMinutes) : '—', l: 'de filmes no mês', s: allMinutes ? formatDuration(allMinutes) + ' no total' : '' }
     ];
     stats.forEach(function (st, i) {
       var x = M + i * colW;
@@ -668,69 +727,37 @@
       ctx.font = vs + 'px ' + SHARE.DISPLAY;
       while (vs > 30 && ctx.measureText(st.v).width > colW - 20) { vs -= 2; ctx.font = vs + 'px ' + SHARE.DISPLAY; }
       ctx.fillText(st.v, x, statsY + 50);
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
       ctx.font = '400 16px ' + SHARE.BODY;
       ctx.fillText(ellipsize(ctx, st.l, colW - 12), x, statsY + 74);
+      if (st.s) {
+        ctx.fillStyle = SHARE.STAR;
+        ctx.font = '600 14px ' + SHARE.BODY;
+        ctx.fillText(ellipsize(ctx, st.s, colW - 12), x, statsY + 94);
+      }
     });
 
-    var cursor = statsY + 74 + 28;
+    var cursor = statsY + 96 + 24;
 
-    // Filme do mês
-    if (hasHero) {
-      var hh = HERO_H, hw = Math.round(hh / 1.5);
-      var boxH = hh + 28;
-      ctx.save();
-      roundRectPath(ctx, M, cursor, CW, boxH, 16);
-      var hg = ctx.createLinearGradient(M, cursor, M + CW, cursor + boxH);
-      hg.addColorStop(0, 'rgba(185,132,42,0.26)');
-      hg.addColorStop(1, 'rgba(185,132,42,0.05)');
-      ctx.fillStyle = hg;
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(185,132,42,0.5)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.restore();
-
-      drawPoster(ctx, top, topImg, M + 14, cursor + 14, hw, hh, 8);
-
-      var tx = M + 14 + hw + 26;
-      var tw = M + CW - 20 - tx;
-      ctx.fillStyle = SHARE.STAR;
-      ctx.font = '600 17px ' + SHARE.BODY;
-      ctx.fillText('Filme do mês', tx, cursor + 14 + 22);
-
-      var t = fitText(ctx, top.title, SHARE.DISPLAY, '', [64, 54, 46, 40], tw, 2);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = t.size + 'px ' + SHARE.DISPLAY;
-      var ty = cursor + 14 + 22 + 10 + t.size * 0.9;
-      t.lines.forEach(function (ln, i) { ctx.fillText(ln, tx, ty + i * t.size * 0.98); });
-      var after = ty + (t.lines.length - 1) * t.size * 0.98 + 26;
-
-      drawStar(ctx, tx + 14, after, 14, SHARE.STAR);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '700 26px ' + SHARE.BODY;
-      var scoreTxt = formatRating(top.rating);
-      ctx.fillText(scoreTxt, tx + 36, after + 9);
-      var scoreW = ctx.measureText(scoreTxt).width;
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.font = '400 18px ' + SHARE.BODY;
-      ctx.fillText('/10', tx + 36 + scoreW + 3, after + 9);
-      var gtxt = (top.genres && top.genres.length) ? top.genres.join(', ') : '';
-      if (gtxt) {
-        var gl = fitText(ctx, gtxt, SHARE.BODY, '400', [18, 16], tw, 2);
-        ctx.fillStyle = 'rgba(255,255,255,0.68)';
-        ctx.font = '400 ' + gl.size + 'px ' + SHARE.BODY;
-        gl.lines.forEach(function (ln, i) { ctx.fillText(ln, tx, after + 34 + i * (gl.size + 5)); });
+    // Destaques do mês: um ocupa a largura toda; dois ficam lado a lado
+    if (heroes.length) {
+      if (twoUp) {
+        var gapH = 16, bw2 = Math.floor((CW - gapH) / 2);
+        heroes.forEach(function (h, i) {
+          drawHero(ctx, h.e, heroImgs[i], h.label, M + i * (bw2 + gapH), cursor, bw2, HERO_H, [44, 38, 33, 28, 24]);
+        });
+      } else {
+        drawHero(ctx, heroes[0].e, heroImgs[0], heroes[0].label, M, cursor, CW, HERO_H, [64, 54, 46, 40]);
       }
-      cursor += boxH + 26;
+      cursor += HERO_BOX + 26;
     }
 
-    // Faixa de pôsteres do mês
+    // Faixa de pôsteres do mês (filmes e séries, por data)
     if (n === 0) {
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
       ctx.font = '400 20px ' + SHARE.BODY;
       ctx.textAlign = 'center';
-      ctx.fillText('Nenhum filme registrado este mês ainda.', W / 2, (regionTop + regionBottom) / 2);
+      ctx.fillText('Nada registrado este mês ainda.', W / 2, (regionTop + regionBottom) / 2);
       ctx.textAlign = 'left';
     } else {
       ctx.fillStyle = SHARE.GOLD;
@@ -744,7 +771,7 @@
         var col = q % perRow, row = Math.floor(q / perRow);
         var px = gx + col * (tileW + 8), py = gy + row * (tileH + 8);
         if (q < shown.length) {
-          drawPoster(ctx, shown[q], imgs[q + 1], px, py, tileW, tileH, 6);
+          drawPoster(ctx, shown[q], tileImgs[q], px, py, tileW, tileH, 6);
         } else {
           ctx.save();
           roundRectPath(ctx, px, py, tileW, tileH, 6);
@@ -762,27 +789,21 @@
       }
     }
 
-    // Rodapé: totais gerais
+    // Rodapé: marca e episódios assistidos no total
     ctx.fillStyle = 'rgba(255,255,255,0.16)';
     ctx.fillRect(M, footerY - 22, CW, 1);
-    ctx.fillStyle = 'rgba(255,255,255,0.62)';
-    ctx.font = '400 16px ' + SHARE.BODY;
-    var lbl = 'Total de filmes: ';
-    ctx.fillText(lbl, M, footerY);
-    var lblW = ctx.measureText(lbl).width;
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '700 16px ' + SHARE.BODY;
-    ctx.fillText(String(d.totalCount), M + lblW, footerY);
-    if (d.totalMinutes) {
-      var tv = formatDuration(d.totalMinutes);
+    ctx.fillStyle = SHARE.GOLD;
+    ctx.font = '22px ' + SHARE.DISPLAY;
+    ctx.fillText('WAndCine', M, footerY);
+    if (d.totalEpisodes) {
+      var ev = d.totalEpisodes.toLocaleString('pt-BR');
       ctx.textAlign = 'right';
       ctx.fillStyle = '#ffffff';
       ctx.font = '700 16px ' + SHARE.BODY;
-      ctx.fillText(tv, W - M, footerY);
-      var tvW = ctx.measureText(tv).width;
+      ctx.fillText(ev, W - M - ctx.measureText(' episódios assistidos').width, footerY);
       ctx.fillStyle = 'rgba(255,255,255,0.62)';
       ctx.font = '400 16px ' + SHARE.BODY;
-      ctx.fillText('Tempo total: ', W - M - tvW, footerY);
+      ctx.fillText(' episódios assistidos', W - M, footerY);
       ctx.textAlign = 'left';
     }
 
@@ -831,7 +852,7 @@
       showToast('Enviando fundo…');
       api('PUT', '/api/share-bg', undefined, f).then(function (r) {
         shareBgVersion = r.shareBg;
-        renderMovieRecap();
+        renderShare();
         showToast('Fundo atualizado. A próxima imagem já usa ele.');
       }).catch(function (err) { showToast('Não foi possível enviar o fundo: ' + err.message); });
     });
@@ -892,7 +913,7 @@
   function removeShareBg() {
     api('DELETE', '/api/share-bg').then(function () {
       shareBgVersion = null;
-      renderMovieRecap();
+      renderShare();
       showToast('Fundo removido.');
     }).catch(function (err) { showToast(err.message); });
   }
@@ -901,7 +922,7 @@
     try {
       var blob = await buildShareImage();
       var file = new File([blob], recapFileName(), { type: 'image/png' });
-      await navigator.share({ files: [file], title: 'Meu registro' });
+      await navigator.share({ files: [file], title: 'WAndCine' });
     } catch (err) {
       if (!err || err.name !== 'AbortError') showToast('Não foi possível compartilhar.');
     }
@@ -909,8 +930,9 @@
 
   function render() {
     renderTabs();
+    renderShare();
+    if (state.activeTab === 'share') return;
     renderStats();
-    renderMovieRecap();
     renderGenreBreakdown();
     renderList();
   }
@@ -1285,12 +1307,12 @@
     });
   });
 
-  document.getElementById('movie-recap').addEventListener('click', function (e) {
+  document.getElementById('share-view').addEventListener('click', function (e) {
     var fmtBtn = e.target.closest('[data-fmt]');
     if (fmtBtn && SHARE_FORMATS[fmtBtn.dataset.fmt]) {
       shareFormat = fmtBtn.dataset.fmt;
       try { localStorage.setItem('wandcine.shareFormat', shareFormat); } catch (_) { /* sem armazenamento */ }
-      renderMovieRecap();
+      renderShare();
       return;
     }
     if (e.target.closest('#recap-copy-btn')) { copyRecapText(); return; }
@@ -1531,7 +1553,7 @@
   api('GET', '/api/me').then(function (me) {
     shareBgVersion = me.shareBg || null;
     applyLogo(me.logo || null);
-    renderMovieRecap();
+    if (state.activeTab === 'share') renderShare();
     coversEnabled = !!me.covers;
     if (me.covers) {
       document.getElementById('covers-btn').classList.remove('hidden');

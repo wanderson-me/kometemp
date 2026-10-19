@@ -170,114 +170,18 @@
     margin-bottom: 1px;
   }
 
-  /* ---- Hero recap (movies only) ---- */
-  .movie-recap { margin-bottom: 24px; }
-  .recap-card {
-    background: linear-gradient(125deg, #241f19 0%, #2d251d 55%, var(--movie-deep) 150%);
-    color: var(--sidebar-text);
-    border-radius: var(--radius-lg);
-    padding: 28px 30px;
-    box-shadow: 0 18px 40px var(--shadow-strong);
-  }
-  .recap-header { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
-  .recap-emoji { font-size: 2rem; line-height: 1; }
-  .recap-header h2 {
-    font-family: var(--font-display);
-    font-size: 1.7rem;
-    margin: 0;
-    letter-spacing: 0.02em;
-    color: #f6dfab;
-    line-height: 1;
-  }
-  .recap-month { display: block; font-size: 0.8rem; opacity: 0.65; margin-top: 4px; }
-  .recap-totals {
-    display: flex;
-    gap: 30px;
-    flex-wrap: wrap;
-    margin-bottom: 22px;
-    padding-bottom: 20px;
-    border-bottom: 1px dashed rgba(255,255,255,0.18);
-  }
-  .recap-stat { display: flex; flex-direction: column; }
-  .recap-stat b {
-    font-family: var(--font-display);
-    font-size: 2.2rem;
-    letter-spacing: 0.01em;
-    color: #fff;
-    line-height: 1;
-  }
-  .recap-stat span { font-size: 0.78rem; opacity: 0.65; margin-top: 6px; }
-  .recap-month-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 12px;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .recap-month-head h3 {
-    font-family: var(--font-display);
-    font-size: 1.15rem;
-    margin: 0;
-    font-weight: normal;
-    letter-spacing: 0.02em;
-    color: #f6dfab;
-  }
-  .recap-month-head span { font-size: 0.78rem; opacity: 0.6; }
-  .recap-spotlight {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-    background: linear-gradient(120deg, rgba(185,132,42,0.22), rgba(185,132,42,0.05));
-    border: 1px solid rgba(185,132,42,0.4);
-    border-radius: 14px;
-    padding: 15px 17px;
-    margin-bottom: 22px;
-  }
-  .recap-spotlight-cover {
-    width: 54px;
-    height: 78px;
-    flex-shrink: 0;
-    border-radius: 7px;
-    background-size: cover;
-    background-position: center;
-    background-color: rgba(255,255,255,0.08);
-  }
-  .recap-spotlight-body { min-width: 0; }
-  .recap-spotlight-label {
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--series);
-    margin-bottom: 4px;
-  }
-  .recap-spotlight-title {
-    font-family: var(--font-display);
-    font-size: 1.3rem;
-    letter-spacing: 0.01em;
-    line-height: 1.1;
-    margin-bottom: 4px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .recap-spotlight-stars { color: #e8c267; font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; }
-  .recap-spotlight-stars small { color: rgba(255,255,255,0.6); font-weight: 400; font-size: 0.8rem; margin-left: 2px; }
-  .recap-spotlight-genre { font-size: 0.78rem; opacity: 0.65; }
-  .recap-list { display: flex; flex-direction: column; gap: 8px; }
-  .recap-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    background: rgba(255,255,255,0.05);
-    padding: 10px 14px;
-    border-radius: 9px;
-  }
-  .recap-item-title { font-weight: 600; font-size: 0.92rem; }
-  .recap-item-genre { font-size: 0.75rem; opacity: 0.6; text-align: right; white-space: nowrap; }
-  .recap-empty { opacity: 0.6; font-size: 0.88rem; padding: 8px 0; }
+  /* ---- Compartilhar ---- */
+  .share-view { margin-bottom: 24px; }
+  .share-head h2 { font-family: var(--font-display); font-size: 1.7rem; font-weight: normal; letter-spacing: 0.02em; margin: 0 0 4px; }
+  .share-head p { margin: 0 0 16px; color: var(--ink-soft); font-size: 0.9rem; max-width: 56ch; }
+  .share-stage { display: flex; justify-content: flex-start; }
+  .share-preview { display: block; width: 100%; max-width: 520px; height: auto; border-radius: 12px; background: #241f19; box-shadow: 0 10px 28px rgba(0,0,0,0.28); transition: opacity 0.2s; }
+  .share-preview.loading { opacity: 0.45; }
+  body.view-share .toolbar, body.view-share #filter-summary, body.view-share #stats,
+  body.view-share #genre-breakdown, body.view-share #list, body.view-share #empty-state { display: none !important; }
+  .tab--share.active { border-left-color: #e8c267; }
+  .tab--share.active .nav-dot { background: #e8c267; opacity: 1; }
+
   .recap-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
   .recap-actions .btn-secondary { background: var(--paper-raised); border: 1px solid var(--line); color: var(--ink); }
 
@@ -533,6 +437,7 @@
     .tab { white-space: nowrap; border-left: none; border-bottom: 3px solid transparent; }
     .tab--movie.active { border-bottom-color: var(--movie); border-left-color: transparent; }
     .tab--series.active { border-bottom-color: var(--series); border-left-color: transparent; }
+  .tab--share.active { border-bottom-color: #e8c267; border-left-color: transparent; }
     .main { padding: 22px 18px 70px; }
   }
   @media (max-width: 520px) {
@@ -598,10 +503,7 @@
   .tab .nav-dot { display: none; }
   .tab-count { margin-left: 4px; }
   .main { padding: 18px 16px 70px; }
-  .recap-card { padding: 22px 18px; }
-  .recap-totals { gap: 20px; }
-  .recap-item { flex-direction: column; align-items: flex-start; gap: 2px; }
-  .recap-item-genre { text-align: left; white-space: normal; }
+  .share-preview { max-width: 100%; }
 }
 @media (max-width: 520px) {
   .toolbar input[type="search"] { flex: 0 0 auto; width: 100%; }
