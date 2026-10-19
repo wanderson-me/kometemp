@@ -11,6 +11,7 @@
   // O app é só de filmes e séries; registros antigos de jogos ficam guardados no banco, mas não aparecem.
   function visible(list) { return list.filter(function (e) { return e.type === 'movie' || e.type === 'series'; }); }
   var shareBgVersion = null;
+  var logoVersion = null;
 
   var state = {
     activeTab: 'movie',
@@ -340,6 +341,7 @@
     };
     return {
       monthLabel: MONTH_NAMES[now.getMonth()] + ' de ' + now.getFullYear(),
+      year: now.getFullYear(),
       monthName: MONTH_NAMES[now.getMonth()],
       totalMovies: movies.length,
       totalSeries: series.length,
@@ -444,12 +446,20 @@
 
   // ---- Imagem quadrada (800x800) para redes sociais, desenhada direto no canvas ----
   var SHARE_FORMATS = {
-    square: { H: 800, label: '800×800', maxRows: 3, heroH: 210, maxTile: 133 },
-    portrait: { H: 1000, label: '800×1000', maxRows: 4, heroH: 270, maxTile: 190 }
+    square: {
+      H: 800, label: '800×800', M: 30, headerH: 84, logoR: 30, titleSize: 56, subSize: 12, tagSize: 22,
+      statsH: 84, statsStack: false, gap: 10, secH: 24, secFont: 22, heroH: 118, heroPill: false,
+      legendCard: false, bottom: 16, maxTile: 120
+    },
+    portrait: {
+      H: 1000, label: '800×1000', M: 36, headerH: 108, logoR: 38, titleSize: 68, subSize: 13, tagSize: 26,
+      statsH: 126, statsStack: true, gap: 14, secH: 30, secFont: 26, heroH: 160, heroPill: true,
+      legendCard: true, bottom: 24, maxTile: 124
+    }
   };
   var shareFormat = 'square';
   try { var savedFmt = localStorage.getItem('wandcine.shareFormat'); if (SHARE_FORMATS[savedFmt]) shareFormat = savedFmt; } catch (_) { /* sem armazenamento */ }
-  var SHARE = { W: 800, M: 48, BG: '#1c1914', GOLD: '#f6dfab', STAR: '#e8c267', DISPLAY: '"Bebas Neue", "Arial Narrow", Impact, sans-serif', BODY: '"Work Sans", -apple-system, "Segoe UI", sans-serif' };
+  var SHARE = { W: 800, AMBER: '#f0b13a', DISPLAY: '"Bebas Neue", "Arial Narrow", Impact, sans-serif', BODY: '"Work Sans", -apple-system, "Segoe UI", sans-serif', SCRIPT: '"Caveat", "Segoe Script", "Brush Script MT", cursive' };
 
   function loadImage(src) {
     return new Promise(function (resolve) {
@@ -553,9 +563,9 @@
 
   // ---- Selos por nota (imagem de compartilhamento) ----
   var BADGES = {
-    skip: { key: 'skip', label: 'Quero meu tempo de volta', color: '#c8452f' },
-    rec: { key: 'rec', label: 'Fica a indicação', color: '#2f9a7d' },
-    must: { key: 'must', label: 'Já deveria ter assistido', color: '#e8c267' }
+    skip: { key: 'skip', range: 'Até 4', label: 'Quero meu tempo de volta', color: '#e5534b', icon: 'heartbreak' },
+    rec: { key: 'rec', range: '5 a 8', label: 'Fica a indicação', color: '#f2b632', icon: 'star' },
+    must: { key: 'must', range: '9 ou 10', label: 'Já deveria ter assistido', color: '#3ecf7c', icon: 'trophy' }
   };
   // Até 4: não valeu o tempo · 5 a 8: vale a indicação · 9 e 10: obrigatório. Sem nota: sem selo.
   function badgeFor(e) {
@@ -566,7 +576,83 @@
     return BADGES.must;
   }
 
-  // Disco colorido com anel claro e um ícone desenhado em código (estrela, joinha, ampulheta).
+  function hexA(hex, a) {
+    var n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+
+  // Ícones simples desenhados em código, numa grade 24x24 (`cut` = cor do fundo, para recortes).
+  function drawIcon(ctx, kind, cx, cy, size, color, cut) {
+    var k = size / 24, i, a;
+    ctx.save();
+    ctx.translate(cx - 12 * k, cy - 12 * k);
+    ctx.scale(k, k);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (kind === 'star') {
+      ctx.beginPath();
+      for (i = 0; i < 10; i++) { a = -Math.PI / 2 + i * Math.PI / 5; ctx.lineTo(12 + Math.cos(a) * (i % 2 ? 4.9 : 11), 12.8 + Math.sin(a) * (i % 2 ? 4.9 : 11)); }
+      ctx.closePath(); ctx.fill();
+    } else if (kind === 'trophy') {
+      ctx.beginPath();
+      ctx.moveTo(6.5, 3); ctx.lineTo(17.5, 3); ctx.lineTo(17.5, 8.5);
+      ctx.bezierCurveTo(17.5, 12, 15, 14.5, 12, 14.5); ctx.bezierCurveTo(9, 14.5, 6.5, 12, 6.5, 8.5);
+      ctx.closePath(); ctx.fill();
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(6.5, 5); ctx.bezierCurveTo(2, 5, 2, 11, 7, 11.4);
+      ctx.moveTo(17.5, 5); ctx.bezierCurveTo(22, 5, 22, 11, 17, 11.4);
+      ctx.stroke();
+      ctx.fillRect(10.8, 14.2, 2.4, 4.2);
+      ctx.fillRect(7.5, 18.4, 9, 2.6);
+    } else if (kind === 'heartbreak') {
+      ctx.beginPath();
+      ctx.moveTo(12, 21);
+      ctx.bezierCurveTo(4.5, 15, 2, 11.8, 2, 8.3); ctx.bezierCurveTo(2, 5.5, 4.2, 3.5, 6.8, 3.5);
+      ctx.bezierCurveTo(9, 3.5, 10.8, 4.8, 12, 6.5); ctx.bezierCurveTo(13.2, 4.8, 15, 3.5, 17.2, 3.5);
+      ctx.bezierCurveTo(19.8, 3.5, 22, 5.5, 22, 8.3); ctx.bezierCurveTo(22, 11.8, 19.5, 15, 12, 21);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = cut || '#000';
+      ctx.lineWidth = 1.9;
+      ctx.beginPath(); ctx.moveTo(12, 6.4); ctx.lineTo(9.8, 10.2); ctx.lineTo(13.4, 12.4); ctx.lineTo(10.6, 16.4); ctx.stroke();
+    } else if (kind === 'clapper') {
+      ctx.fillRect(3, 10.5, 18, 10.5);
+      ctx.fillRect(3, 5.2, 18, 4);
+      ctx.strokeStyle = cut || '#000';
+      ctx.lineWidth = 1.7;
+      ctx.beginPath();
+      [8, 13, 18].forEach(function (x) { ctx.moveTo(x, 5.2); ctx.lineTo(x - 2.6, 9.2); });
+      ctx.stroke();
+    } else if (kind === 'tv') {
+      ctx.strokeRect(3, 7.5, 18, 12.5);
+      ctx.beginPath(); ctx.moveTo(8.5, 3.2); ctx.lineTo(12, 7.5); ctx.lineTo(15.5, 3.2); ctx.stroke();
+    } else if (kind === 'clock') {
+      ctx.beginPath(); ctx.arc(12, 12, 9, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(12, 6.5); ctx.lineTo(12, 12); ctx.lineTo(15.8, 14.2); ctx.stroke();
+    } else if (kind === 'play') {
+      ctx.strokeRect(3, 5.5, 18, 13);
+      ctx.beginPath(); ctx.moveTo(10, 9); ctx.lineTo(10, 15); ctx.lineTo(15.2, 12); ctx.closePath(); ctx.fill();
+    } else if (kind === 'crown') {
+      ctx.beginPath();
+      ctx.moveTo(3, 18); ctx.lineTo(2, 7); ctx.lineTo(8, 12); ctx.lineTo(12, 5); ctx.lineTo(16, 12); ctx.lineTo(22, 7); ctx.lineTo(21, 18);
+      ctx.closePath(); ctx.fill();
+      ctx.fillRect(3, 19.4, 18, 2.2);
+    } else if (kind === 'reel') {
+      ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.arc(12, 12, 10, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(12, 12, 1.7, 0, Math.PI * 2); ctx.fill();
+      for (i = 0; i < 5; i++) {
+        a = -Math.PI / 2 + i * 2 * Math.PI / 5;
+        ctx.beginPath(); ctx.arc(12 + Math.cos(a) * 5.6, 12 + Math.sin(a) * 5.6, 2.2, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  // Selo redondo (disco colorido com anel claro e o ícone da nota).
   function drawBadge(ctx, b, cx, cy, r) {
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,0.5)';
@@ -577,186 +663,209 @@
     ctx.fillStyle = b.color;
     ctx.fill();
     ctx.restore();
-    ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, r - r * 0.07, 0, Math.PI * 2);
     ctx.lineWidth = Math.max(1.5, r * 0.14);
     ctx.strokeStyle = 'rgba(255,255,255,0.92)';
     ctx.stroke();
-    if (b.key === 'must') {
-      drawStar(ctx, cx, cy + r * 0.04, r * 0.62, '#4a3206');
-    } else {
-      // ícones em uma grade 24x24, centralizados no disco
-      var k = r * 1.05 / 24;
-      ctx.translate(cx - 12 * k, cy - 12 * k);
-      ctx.scale(k, k);
-      ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = '#ffffff';
-      if (b.key === 'rec') {
-        ctx.beginPath(); // punho
-        ctx.rect(3, 11, 4, 10);
-        ctx.fill();
-        ctx.beginPath(); // mão com o polegar para cima
-        ctx.moveTo(9, 21); ctx.lineTo(9, 11); ctx.lineTo(13, 3);
-        ctx.bezierCurveTo(14.6, 3, 15.6, 4.3, 15.1, 6);
-        ctx.lineTo(14, 10); ctx.lineTo(19.5, 10);
-        ctx.bezierCurveTo(20.9, 10, 21.8, 11.3, 21.4, 12.6);
-        ctx.lineTo(19.7, 19);
-        ctx.bezierCurveTo(19.4, 20.1, 18.5, 21, 17.3, 21);
-        ctx.closePath();
-        ctx.fill();
-      } else {
-        ctx.lineWidth = 2.2;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.beginPath(); ctx.moveTo(6, 3.5); ctx.lineTo(18, 3.5); ctx.moveTo(6, 20.5); ctx.lineTo(18, 20.5); ctx.stroke();
-        ctx.beginPath(); // ampulheta
-        ctx.moveTo(7.5, 3.5); ctx.lineTo(16.5, 3.5); ctx.lineTo(12, 12); ctx.closePath(); ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(12, 12); ctx.lineTo(16.5, 20.5); ctx.lineTo(7.5, 20.5); ctx.closePath(); ctx.fill();
-      }
-    }
-    ctx.restore();
+    drawIcon(ctx, b.icon, cx, cy + (b.key === 'rec' ? r * 0.04 : 0), r * 1.1, b.key === 'skip' ? '#ffffff' : '#1d140a', b.color);
+  }
+
+  // Texto com espaçamento entre as letras (letterSpacing não existe em todos os navegadores).
+  function spacedWidth(ctx, text, sp) {
+    var w = 0;
+    for (var i = 0; i < text.length; i++) w += ctx.measureText(text[i]).width + sp;
+    return w - sp;
+  }
+  function spacedText(ctx, text, x, y, sp) {
+    for (var i = 0; i < text.length; i++) { ctx.fillText(text[i], x, y); x += ctx.measureText(text[i]).width + sp; }
   }
 
   // "2 de 5 temp. · 42 ep." a partir dos campos da série.
   function seriesProgress(e) {
     var bits = [];
     var x = String(e.extra || '').trim();
-    if (x) bits.push(/^\d+ de \d+$/.test(x) ? x + ' temp.' : (/^\d+$/.test(x) ? x + ' temp.' : x));
+    if (x) bits.push(/^\d+( de \d+)?$/.test(x) ? x + ' temp.' : x);
     if (parseInt(e.episodes, 10) > 0) bits.push(e.episodes + ' ep.');
     return bits.join(' · ');
   }
 
-  // Destaque do mês (filme ou série): pôster à esquerda, título, nota e gêneros à direita.
-  function drawHero(ctx, entry, img, label, x0, y0, boxW, hh, titleSizes) {
-    var info = entry.type === 'series' ? seriesProgress(entry) : '';
-    var hw = Math.round(hh / 1.5);
-    var boxH = hh + 28;
-    ctx.save();
-    roundRectPath(ctx, x0, y0, boxW, boxH, 16);
-    var hg = ctx.createLinearGradient(x0, y0, x0 + boxW, y0 + boxH);
-    hg.addColorStop(0, 'rgba(185,132,42,0.26)');
-    hg.addColorStop(1, 'rgba(185,132,42,0.05)');
-    ctx.fillStyle = hg;
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(185,132,42,0.5)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.restore();
+  function drawCardBox(ctx, x, y, w, h, r, fill, stroke, lw) {
+    roundRectPath(ctx, x, y, w, h, r);
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.lineWidth = lw || 1; ctx.strokeStyle = stroke; ctx.stroke(); }
+  }
 
+  function drawLogoDisc(ctx, img, cx, cy, r, ring) {
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.closePath();
+    ctx.fillStyle = '#18110c'; ctx.fill(); ctx.clip();
+    var dd = 2 * r;
+    ctx.drawImage(img, cx - r - dd * 0.106, cy - r - dd * 0.093, dd * 1.22, dd * 1.22);
+    ctx.restore();
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.lineWidth = 2; ctx.strokeStyle = ring; ctx.stroke();
+  }
+
+  function drawReel(ctx, cx, cy, R, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = '#f0b13a'; ctx.fillStyle = '#f0b13a';
+    ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 0.22, 0, Math.PI * 2); ctx.stroke();
+    for (var i = 0; i < 6; i++) {
+      var a = i * Math.PI / 3 + 0.3;
+      ctx.beginPath(); ctx.arc(cx + Math.cos(a) * R * 0.6, cy + Math.sin(a) * R * 0.6, R * 0.17, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawSection(ctx, icon, text, x, y, w, secH, size) {
+    drawIcon(ctx, icon, x + 12, y + secH / 2, secH * 0.82, SHARE.AMBER);
+    ctx.fillStyle = SHARE.AMBER;
+    ctx.font = size + 'px ' + SHARE.DISPLAY;
+    ctx.fillText(text, x + 32, y + secH * 0.8);
+    var tw = ctx.measureText(text).width;
+    ctx.fillStyle = hexA(SHARE.AMBER, 0.35);
+    ctx.fillRect(x + 32 + tw + 14, y + secH / 2, w - (32 + tw + 14), 1);
+  }
+
+  // Destaque do mês (filme ou série): pôster, título, nota, progresso e selo.
+  function drawHeroCard(ctx, entry, img, label, icon, x0, y0, boxW, hh, o) {
+    var hw = Math.round(hh / 1.5), boxH = hh + 28;
+    var isSeries = entry.type === 'series';
+    var badge = badgeFor(entry);
+    var info = isSeries ? seriesProgress(entry) : '';
+    var genres = (!isSeries && entry.genres && entry.genres.length) ? entry.genres.join(', ') : '';
+    drawCardBox(ctx, x0, y0, boxW, boxH, 16, hexA('#000000', 0.38), hexA(SHARE.AMBER, 0.6), 1.5);
     drawPoster(ctx, entry, img, x0 + 14, y0 + 14, hw, hh, 8);
 
-    var gap = boxW > 500 ? 26 : 16;
-    var tx = x0 + 14 + hw + gap;
-    var tw = x0 + boxW - 16 - tx;
-    ctx.fillStyle = SHARE.STAR;
-    ctx.font = '600 ' + (boxW > 500 ? 17 : 15) + 'px ' + SHARE.BODY;
-    ctx.fillText(label, tx, y0 + 14 + 20);
+    var tx = x0 + 14 + hw + 16, tw = x0 + boxW - 16 - tx;
+    drawIcon(ctx, icon, tx + 8, y0 + 14 + 9, 16, SHARE.AMBER, '#1b140d');
+    ctx.fillStyle = SHARE.AMBER;
+    ctx.font = '600 14px ' + SHARE.BODY;
+    ctx.fillText(label, tx + 24, y0 + 14 + 14);
 
-    // O título maior que cabe: no máximo 2 (largo) ou 3 (estreito) linhas e ainda sobra espaço para a nota.
-    var maxLines = boxW > 500 ? 2 : 3;
-    var availText = boxH - 54 - 12 - 36 - (info ? 22 : 0);
-    var t = null;
-    for (var si = 0; si < titleSizes.length && !t; si++) {
-      ctx.font = titleSizes[si] + 'px ' + SHARE.DISPLAY;
-      var tl = wrapLines(ctx, entry.title, tw);
+    var rated = num(entry.rating) > 0;
+    var reserve = (rated ? 34 : 0) + (info ? 22 : 0) + (o.pill && badge ? 32 : 0) + (genres && o.genres ? 20 : 0) + 12;
+    var availText = boxH - 14 - 26 - reserve;
+    var title = String(entry.title || '').toUpperCase();
+    var maxLines = boxW > 500 ? 2 : 3, t = null;
+    for (var si = 0; si < o.sizes.length && !t; si++) {
+      ctx.font = o.sizes[si] + 'px ' + SHARE.DISPLAY;
+      var tl = wrapLines(ctx, title, tw);
       var widest = tl.reduce(function (m, ln) { return Math.max(m, ctx.measureText(ln).width); }, 0);
-      if (tl.length <= maxLines && widest <= tw && tl.length * titleSizes[si] * 0.98 <= availText) t = { size: titleSizes[si], lines: tl };
+      if (tl.length <= maxLines && widest <= tw && tl.length * o.sizes[si] * 0.98 <= availText) t = { size: o.sizes[si], lines: tl };
     }
-    if (!t) t = fitText(ctx, entry.title, SHARE.DISPLAY, '', [titleSizes[titleSizes.length - 1]], tw, maxLines);
+    if (!t) t = fitText(ctx, title, SHARE.DISPLAY, '', [o.sizes[o.sizes.length - 1]], tw, maxLines);
     ctx.fillStyle = '#ffffff';
     ctx.font = t.size + 'px ' + SHARE.DISPLAY;
-    var ty = y0 + 14 + 20 + 10 + t.size * 0.9;
-    t.lines.forEach(function (ln, i) { ctx.fillText(ln, tx, ty + i * t.size * 0.98); });
-    var after = ty + (t.lines.length - 1) * t.size * 0.98 + 26;
+    var yy = y0 + 14 + 26;
+    t.lines.forEach(function (ln, i) { ctx.fillText(ln, tx, yy + t.size * 0.86 + i * t.size * 0.98); });
+    yy += t.lines.length * t.size * 0.98 + 6;
 
-    drawStar(ctx, tx + 12, after, 12, SHARE.STAR);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '700 ' + (boxW > 500 ? 26 : 22) + 'px ' + SHARE.BODY;
-    var scoreTxt = formatRating(entry.rating);
-    ctx.fillText(scoreTxt, tx + 32, after + 8);
-    var scoreW = ctx.measureText(scoreTxt).width;
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.font = '400 16px ' + SHARE.BODY;
-    ctx.fillText('/10', tx + 32 + scoreW + 3, after + 8);
-    var heroBadge = badgeFor(entry);
-    if (heroBadge) {
-      var slashW = ctx.measureText('/10').width;
-      drawBadge(ctx, heroBadge, tx + 32 + scoreW + 3 + slashW + 22, after, 12);
+    if (genres && o.genres) {
+      ctx.fillStyle = 'rgba(255,255,255,0.72)';
+      ctx.font = '400 14px ' + SHARE.BODY;
+      ctx.fillText(ellipsize(ctx, genres, tw), tx, yy + 12);
+      yy += 20;
     }
-    var rowY = after + 32;
+    if (rated) {
+      drawStar(ctx, tx + 11, yy + 14, 11, SHARE.AMBER);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 ' + (o.big ? 26 : 22) + 'px ' + SHARE.BODY;
+      var sc = formatRating(entry.rating);
+      ctx.fillText(sc, tx + 30, yy + 22);
+      var scW = ctx.measureText(sc).width;
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.font = '400 16px ' + SHARE.BODY;
+      ctx.fillText('/10', tx + 30 + scW + 3, yy + 22);
+      if (badge && !o.pill) drawBadge(ctx, badge, tx + 30 + scW + 3 + ctx.measureText('/10').width + 22, yy + 14, 12);
+      yy += 34;
+    }
     if (info) {
-      ctx.fillStyle = 'rgba(255,255,255,0.82)';
-      ctx.font = '600 ' + (boxW > 500 ? 17 : 14) + 'px ' + SHARE.BODY;
-      ctx.fillText(ellipsize(ctx, info, tw), tx, rowY);
-      rowY += 24;
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.font = '600 14px ' + SHARE.BODY;
+      ctx.fillText(ellipsize(ctx, info, tw), tx, yy + 10);
+      yy += 22;
     }
-    var gtxt = (entry.genres && entry.genres.length) ? entry.genres.join(', ') : '';
-    if (gtxt && rowY + 12 < y0 + boxH) {
-      var gl = fitText(ctx, gtxt, SHARE.BODY, '400', boxW > 500 ? [18, 16] : [15, 13], tw, 1);
-      ctx.fillStyle = 'rgba(255,255,255,0.68)';
-      ctx.font = '400 ' + gl.size + 'px ' + SHARE.BODY;
-      gl.lines.forEach(function (ln, i) { ctx.fillText(ln, tx, rowY + i * (gl.size + 5)); });
+    if (o.pill && badge) {
+      var txt = badge.label.toUpperCase();
+      ctx.font = '700 11.5px ' + SHARE.BODY;
+      var pw = Math.min(tw, 30 + spacedWidth(ctx, txt, 0.4) + 12);
+      drawCardBox(ctx, tx, yy + 2, pw, 26, 13, hexA(badge.color, 0.14), badge.color, 1.5);
+      drawIcon(ctx, badge.icon, tx + 16, yy + 15, 16, badge.color, '#1b140d');
+      ctx.fillStyle = badge.color;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(tx + 28, yy, pw - 32, 30); ctx.clip();
+      spacedText(ctx, txt, tx + 28, yy + 19, 0.4);
+      ctx.restore();
     }
-    return boxH;
   }
 
   async function buildShareImage() {
     var d = getRecapData();
     var FMT = SHARE_FORMATS[shareFormat] || SHARE_FORMATS.square;
-    var W = SHARE.W, H = FMT.H, M = SHARE.M, CW = W - 2 * M;
+    var W = SHARE.W, H = FMT.H, M = FMT.M, CW = W - 2 * M;
+    var AMBER = SHARE.AMBER;
     try {
       await Promise.all([
         document.fonts.load('64px "Bebas Neue"'),
         document.fonts.load('400 16px "Work Sans"'),
-        document.fonts.load('600 18px "Work Sans"')
+        document.fonts.load('600 18px "Work Sans"'),
+        document.fonts.load('700 18px "Work Sans"'),
+        document.fonts.load('600 24px "Caveat"')
       ]);
     } catch (err) { /* usa as fontes de reserva */ }
 
     var n = d.monthItems.length;
     var heroes = [];
-    if (d.topMovie) heroes.push({ e: d.topMovie, label: 'Filme do mês' });
-    if (d.topSeries) heroes.push({ e: d.topSeries, label: 'Série do mês' });
+    if (d.topMovie) heroes.push({ e: d.topMovie, label: 'Filme do mês', icon: 'clapper' });
+    if (d.topSeries) heroes.push({ e: d.topSeries, label: 'Série do mês', icon: 'tv' });
     var twoUp = heroes.length === 2;
-    var HERO_H = twoUp ? Math.round(FMT.heroH * 0.78) : FMT.heroH;
-    var HERO_BOX = HERO_H + 28;
 
-    // Layout da faixa de pôsteres: o maior tamanho em que todos cabem
-    var headBottom = M + 78 + 24 + 96 + 24;           // fim do cabeçalho + números do mês
-    var regionTop = headBottom + (heroes.length ? HERO_BOX + 26 : 0);
-    var footerY = H - M + 4;
-    var hasLegend = d.monthItems.some(function (e) { return !!badgeFor(e); });
-    var regionBottom = footerY - 34 - (hasLegend ? 30 : 0);
-    var gridTop = regionTop + 36;
-    var availH = regionBottom - gridTop;
-    var tileW = 48, perRow = 1, rows = 1, overflow = 0;
-    var shown = d.monthItems;
-    var fitted = false;
-    for (var tw0 = FMT.maxTile; tw0 >= 48 && !fitted; tw0--) {
-      var th0 = Math.round(tw0 * 1.5);
-      var r0 = Math.min(FMT.maxRows, Math.floor((availH + 8) / (th0 + 8)));
-      var c0 = Math.floor((CW + 8) / (tw0 + 8));
-      if (r0 >= 1 && c0 * r0 >= n) {
-        tileW = tw0; perRow = c0; rows = Math.max(1, Math.ceil(n / c0)); fitted = true;
-      }
+    // ---- Plano vertical: o que sobra entre os blocos fixos é a grade de pôsteres ----
+    var statsTop = M + FMT.headerH + FMT.gap;
+    var statsBottom = statsTop + FMT.statsH;
+    var heroBox = FMT.heroH + 28;
+    var heroTop = statsBottom + FMT.gap + FMT.secH;
+    var heroBottom = heroes.length ? heroTop + heroBox : statsBottom;
+    var monthSecTop = heroBottom + FMT.gap;
+    var gridTop = monthSecTop + FMT.secH;
+    var footerBase = H - FMT.bottom;
+    var legendH = FMT.legendCard ? 92 : 28;
+    var legendTop = footerBase - 26 - 6 - legendH;
+    var gridH = legendTop - 10 - gridTop;
+
+    var GAP = 8, PAD = 3, TEXT = 40;
+    var cardH = function (w, withText) { return 2 * PAD + Math.round((w - 2 * PAD) * 1.5) + (withText ? TEXT : 0); };
+    var tw = 44, withText = false, perRow = 1, fitted = false;
+    for (var t0 = FMT.maxTile; t0 >= 44 && !fitted; t0--) {
+      var wt = t0 >= 92;
+      var c0 = Math.floor((CW + GAP) / (t0 + GAP));
+      var r0 = Math.min(4, Math.floor((gridH + GAP) / (cardH(t0, wt) + GAP)));
+      if (r0 >= 1 && c0 * r0 >= n) { tw = t0; withText = wt; perRow = c0; fitted = true; }
     }
+    var shown = d.monthItems, overflow = 0;
     if (!fitted) {
-      tileW = 48;
-      perRow = Math.floor((CW + 8) / (tileW + 8));
-      rows = Math.max(1, Math.min(FMT.maxRows, Math.floor((availH + 8) / (Math.round(tileW * 1.5) + 8))));
-      var cap = perRow * rows;
-      shown = d.monthItems.slice(0, cap - 1);
+      tw = 44; withText = false;
+      perRow = Math.floor((CW + GAP) / (tw + GAP));
+      var rowsMax = Math.max(1, Math.min(4, Math.floor((gridH + GAP) / (cardH(tw, false) + GAP))));
+      shown = d.monthItems.slice(0, perRow * rowsMax - 1);
       overflow = n - shown.length;
     }
-    var tileH = Math.round(tileW * 1.5);
+    var ch = cardH(tw, withText);
 
-    var imgs = await Promise.all([loadImage(shareBgVersion ? '/share-bg?v=' + shareBgVersion : null)]
-      .concat(heroes.map(function (h) { return loadImage(h.e.coverUrl); }))
+    var imgs = await Promise.all([
+      loadImage(shareBgVersion ? '/share-bg?v=' + shareBgVersion : null),
+      loadImage(logoVersion ? '/logo?v=' + logoVersion : null)
+    ].concat(heroes.map(function (h) { return loadImage(h.e.coverUrl); }))
       .concat(shown.map(function (e) { return loadImage(e.coverUrl); })));
-    var bgImg = imgs[0];
-    var heroImgs = imgs.slice(1, 1 + heroes.length);
-    var tileImgs = imgs.slice(1 + heroes.length);
+    var bgImg = imgs[0], logoImg = imgs[1];
+    var heroImgs = imgs.slice(2, 2 + heroes.length);
+    var tileImgs = imgs.slice(2 + heroes.length);
 
     var S = 2;
     var big = document.createElement('canvas');
@@ -767,134 +876,226 @@
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign = 'left';
 
-    // Fundo
-    ctx.fillStyle = SHARE.BG;
-    ctx.fillRect(0, 0, W, H);
-    var bg = ctx.createLinearGradient(0, 0, W, H);
-    bg.addColorStop(0, '#241f19');
-    bg.addColorStop(0.55, '#2d251d');
-    bg.addColorStop(1, '#6b2f19');
+    // ---- Fundo ----
+    var bg = ctx.createLinearGradient(0, 0, W * 0.6, H);
+    bg.addColorStop(0, '#15110d');
+    bg.addColorStop(0.55, '#1f1812');
+    bg.addColorStop(1, '#2e1a10');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
-
     if (bgImg) {
-      // Ilustração do usuário ao fundo, com opacidade baixa, e um véu escuro para o texto ficar legível.
       ctx.save();
-      ctx.globalAlpha = 0.34;
+      ctx.globalAlpha = 0.42;
       var bs = Math.max(W / bgImg.width, H / bgImg.height);
       var bw = bgImg.width * bs, bh = bgImg.height * bs;
       ctx.drawImage(bgImg, (W - bw) / 2, (H - bh) / 2, bw, bh);
       ctx.restore();
       var veil = ctx.createLinearGradient(0, 0, 0, H);
-      veil.addColorStop(0, 'rgba(20,16,12,0.62)');
-      veil.addColorStop(0.45, 'rgba(20,16,12,0.30)');
-      veil.addColorStop(1, 'rgba(20,16,12,0.72)');
+      veil.addColorStop(0, 'rgba(14,11,8,0.62)');
+      veil.addColorStop(0.5, 'rgba(14,11,8,0.42)');
+      veil.addColorStop(1, 'rgba(14,11,8,0.74)');
       ctx.fillStyle = veil;
       ctx.fillRect(0, 0, W, H);
+    } else {
+      drawReel(ctx, 20, 70, 130, 0.07);
+      drawReel(ctx, W - 10, H - 150, 170, 0.06);
     }
 
-    // Título: mês e ano
-    var monthTitle = d.monthLabel.charAt(0).toUpperCase() + d.monthLabel.slice(1);
-    ctx.fillStyle = SHARE.GOLD;
-    var titleSize = 78;
-    ctx.font = titleSize + 'px ' + SHARE.DISPLAY;
-    while (titleSize > 36 && ctx.measureText(monthTitle).width > CW) {
-      titleSize -= 2;
-      ctx.font = titleSize + 'px ' + SHARE.DISPLAY;
+    // ---- Cabeçalho: logo, mês e ano, subtítulo, frase ----
+    var logoR = FMT.logoR, lcx = M + logoR, lcy = M + logoR + 2;
+    if (logoImg) drawLogoDisc(ctx, logoImg, lcx, lcy, logoR, hexA(AMBER, 0.7));
+    else drawIcon(ctx, 'clapper', lcx, lcy, logoR * 1.9, AMBER, '#15110d');
+    var titleX = M + logoR * 2 + 18;
+    var part1 = d.monthName.toUpperCase() + ' DE ', part2 = String(d.year);
+    var tSize = FMT.titleSize;
+    var tagLines = ['Mais filmes,', 'mais histórias.'];
+    ctx.font = '600 ' + FMT.tagSize + 'px ' + SHARE.SCRIPT;
+    var tagW = Math.max(ctx.measureText(tagLines[0]).width, ctx.measureText(tagLines[1]).width);
+    var titleW;
+    for (;;) {
+      ctx.font = tSize + 'px ' + SHARE.DISPLAY;
+      titleW = ctx.measureText(part1 + part2).width;
+      if (titleX + titleW <= W - M || tSize <= 34) break;
+      tSize -= 2;
     }
-    ctx.fillText(monthTitle, M, M + 56);
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.fillRect(M, M + 78, CW, 1);
+    var tBase = M + tSize * 0.8;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = tSize + 'px ' + SHARE.DISPLAY;
+    ctx.fillText(part1, titleX, tBase);
+    ctx.fillStyle = AMBER;
+    ctx.fillText(part2, titleX + ctx.measureText(part1).width, tBase);
+    var sub = 'FILMES E SÉRIES ASSISTIDOS';
+    ctx.font = '500 ' + FMT.subSize + 'px ' + SHARE.BODY;
+    var subW = spacedWidth(ctx, sub, 5);
+    var subY = tBase + FMT.subSize + 14;
+    var mid = titleX + titleW / 2;
+    ctx.fillStyle = hexA(AMBER, 0.55);
+    ctx.fillRect(titleX, subY - FMT.subSize * 0.35, Math.max(0, mid - subW / 2 - 14 - titleX), 1);
+    ctx.fillRect(mid + subW / 2 + 14, subY - FMT.subSize * 0.35, Math.max(0, titleX + titleW - (mid + subW / 2 + 14)), 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    spacedText(ctx, sub, mid - subW / 2, subY, 5);
+    if (titleX + titleW + 24 + tagW <= W - M) {
+      ctx.save();
+      ctx.translate(W - M - tagW, M + 30);
+      ctx.rotate(-0.1);
+      ctx.fillStyle = AMBER;
+      ctx.font = '600 ' + FMT.tagSize + 'px ' + SHARE.SCRIPT;
+      ctx.fillText(tagLines[0], 0, 0);
+      ctx.fillText(tagLines[1], 8, FMT.tagSize + 2);
+      ctx.restore();
+    }
 
-    // Números: assistidos no mês, com o total do catálogo logo abaixo
-    var statsY = M + 78 + 24;
+    // ---- Faixa de números ----
+    drawCardBox(ctx, M, statsTop, CW, FMT.statsH, 16, hexA('#000000', 0.38), hexA(AMBER, 0.45), 1.2);
     var colW = CW / 4;
     var stats = [
-      { v: String(d.monthMovies.length), l: (d.monthMovies.length === 1 ? 'filme em ' : 'filmes em ') + d.monthName, s: d.totalMovies + ' no total' },
-      { v: String(d.monthSeries.length), l: (d.monthSeries.length === 1 ? 'série em ' : 'séries em ') + d.monthName, s: d.totalSeries + ' no total' },
-      { v: d.monthMinutes ? formatDuration(d.monthMinutes) : '—', l: 'de filmes no mês', s: d.movieMinutes ? formatDuration(d.movieMinutes) + ' no total' : '' },
-      { v: d.totalEpisodes ? d.totalEpisodes.toLocaleString('pt-BR') : '—', l: 'episódios assistidos', s: d.seriesMinutes ? formatDuration(d.seriesMinutes) + ' de séries' : '' }
+      { icon: 'clapper', v: String(d.monthMovies.length), l: (d.monthMovies.length === 1 ? 'filme em ' : 'filmes em ') + d.monthName, s: d.totalMovies + ' no total' },
+      { icon: 'tv', v: String(d.monthSeries.length), l: (d.monthSeries.length === 1 ? 'série em ' : 'séries em ') + d.monthName, s: d.totalSeries + ' no total' },
+      { icon: 'clock', v: d.monthMinutes ? formatDuration(d.monthMinutes) : '—', l: 'de filmes no mês', s: d.movieMinutes ? formatDuration(d.movieMinutes) + ' no total' : '' },
+      { icon: 'play', v: d.totalEpisodes ? d.totalEpisodes.toLocaleString('pt-BR') : '—', l: 'episódios assistidos', s: d.seriesMinutes ? formatDuration(d.seriesMinutes) + ' de séries' : '' }
     ];
     stats.forEach(function (st, i) {
       var x = M + i * colW;
+      if (i) { ctx.fillStyle = hexA(AMBER, 0.28); ctx.fillRect(x, statsTop + 14, 1, FMT.statsH - 28); }
+      var cx0 = x + 16;
+      var vSize = FMT.statsStack ? 42 : 36;
+      var vX = FMT.statsStack ? cx0 : cx0 + 34;
+      var vMax = colW - 16 - (vX - x) - 8;
+      var vTxt = st.v.toUpperCase();
+      ctx.font = vSize + 'px ' + SHARE.DISPLAY;
+      while (vSize > 24 && ctx.measureText(vTxt).width > vMax) { vSize -= 2; ctx.font = vSize + 'px ' + SHARE.DISPLAY; }
+      var iconR = FMT.statsStack ? 17 : 14;
+      var iy, vy, ly, sy;
+      if (FMT.statsStack) { iy = statsTop + 14 + iconR; vy = statsTop + 90; ly = statsTop + 106; sy = statsTop + 121; }
+      else { iy = statsTop + 12 + iconR; vy = statsTop + 12 + iconR + 12; ly = statsTop + 62; sy = statsTop + 77; }
+      ctx.beginPath(); ctx.arc(cx0 + iconR, iy, iconR, 0, Math.PI * 2); ctx.fillStyle = AMBER; ctx.fill();
+      drawIcon(ctx, st.icon, cx0 + iconR, iy, iconR * 1.15, '#1b140d', AMBER);
       ctx.fillStyle = '#ffffff';
-      var vs = 60;
-      ctx.font = vs + 'px ' + SHARE.DISPLAY;
-      while (vs > 30 && ctx.measureText(st.v).width > colW - 28) { vs -= 2; ctx.font = vs + 'px ' + SHARE.DISPLAY; }
-      ctx.fillText(st.v, x, statsY + 50);
-      ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.font = '400 15px ' + SHARE.BODY;
-      ctx.fillText(ellipsize(ctx, st.l, colW - 10), x, statsY + 74);
+      ctx.font = vSize + 'px ' + SHARE.DISPLAY;
+      ctx.fillText(vTxt, vX, vy);
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.font = '400 ' + (FMT.statsStack ? 12.5 : 11.5) + 'px ' + SHARE.BODY;
+      ctx.fillText(ellipsize(ctx, st.l.toUpperCase(), colW - 24), cx0, ly);
       if (st.s) {
-        ctx.fillStyle = SHARE.STAR;
-        ctx.font = '600 13px ' + SHARE.BODY;
-        ctx.fillText(ellipsize(ctx, st.s, colW - 10), x, statsY + 94);
+        ctx.fillStyle = AMBER;
+        ctx.font = '600 ' + (FMT.statsStack ? 12.5 : 11.5) + 'px ' + SHARE.BODY;
+        ctx.fillText(ellipsize(ctx, st.s, colW - 24), cx0, sy);
       }
     });
 
-    var cursor = statsY + 96 + 24;
-
-    // Destaques do mês: um ocupa a largura toda; dois ficam lado a lado
+    // ---- Destaques do mês ----
     if (heroes.length) {
+      drawSection(ctx, 'crown', 'DESTAQUES DO MÊS', M, statsBottom + FMT.gap, CW, FMT.secH, FMT.secFont);
       if (twoUp) {
-        var gapH = 16, bw2 = Math.floor((CW - gapH) / 2);
+        var gapH = 14, bw2 = Math.floor((CW - gapH) / 2);
         heroes.forEach(function (h, i) {
-          drawHero(ctx, h.e, heroImgs[i], h.label, M + i * (bw2 + gapH), cursor, bw2, HERO_H, [44, 38, 33, 28, 24]);
+          drawHeroCard(ctx, h.e, heroImgs[i], h.label, h.icon, M + i * (bw2 + gapH), heroTop, bw2, FMT.heroH, { pill: FMT.heroPill, genres: false, big: false, sizes: [40, 34, 30, 26, 22] });
         });
       } else {
-        drawHero(ctx, heroes[0].e, heroImgs[0], heroes[0].label, M, cursor, CW, HERO_H, [64, 54, 46, 40]);
+        drawHeroCard(ctx, heroes[0].e, heroImgs[0], heroes[0].label, heroes[0].icon, M, heroTop, CW, FMT.heroH, { pill: FMT.heroPill, genres: true, big: true, sizes: [58, 50, 44, 38, 32] });
       }
-      cursor += HERO_BOX + 26;
     }
 
-    // Faixa de pôsteres do mês (filmes e séries, por data)
+    // ---- Este mês: cards de pôster com borda pela nota ----
+    drawSection(ctx, 'reel', 'ESTE MÊS', M, monthSecTop, CW, FMT.secH, FMT.secFont);
     if (n === 0) {
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
       ctx.font = '400 20px ' + SHARE.BODY;
       ctx.textAlign = 'center';
-      ctx.fillText('Nada registrado este mês ainda.', W / 2, (regionTop + regionBottom) / 2);
+      ctx.fillText('Nada registrado este mês ainda.', W / 2, gridTop + gridH / 2);
       ctx.textAlign = 'left';
-    } else {
-      ctx.fillStyle = SHARE.GOLD;
-      ctx.font = '30px ' + SHARE.DISPLAY;
-      ctx.fillText('Este mês', M, regionTop + 22);
-      var gridH = rows * tileH + (rows - 1) * 8;
-      var gx = M;
-      var gy = gridTop + Math.max(0, Math.floor((availH - gridH) / 2));
-      var total = shown.length + (overflow ? 1 : 0);
-      for (var q = 0; q < total; q++) {
-        var col = q % perRow, row = Math.floor(q / perRow);
-        var px = gx + col * (tileW + 8), py = gy + row * (tileH + 8);
-        if (q < shown.length) {
-          drawPoster(ctx, shown[q], tileImgs[q], px, py, tileW, tileH, 6);
-          var tb = badgeFor(shown[q]);
-          if (tb) {
-            var br = Math.max(11, Math.min(20, Math.round(tileW * 0.16)));
-            drawBadge(ctx, tb, px + tileW - br - 3, py + br + 3, br);
-          }
-        } else {
-          ctx.save();
-          roundRectPath(ctx, px, py, tileW, tileH, 6);
-          ctx.fillStyle = 'rgba(255,255,255,0.1)';
-          ctx.fill();
-          ctx.restore();
-          ctx.fillStyle = '#ffffff';
-          ctx.font = Math.round(tileH * 0.34) + 'px ' + SHARE.DISPLAY;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText('+' + overflow, px + tileW / 2, py + tileH / 2);
+    }
+    var total = shown.length + (overflow ? 1 : 0);
+    var usedRows = Math.max(1, Math.ceil(total / perRow));
+    var gridOff = Math.max(0, Math.floor((gridH - (usedRows * ch + (usedRows - 1) * GAP)) / 2));
+    for (var q = 0; q < total; q++) {
+      var col = q % perRow, row = Math.floor(q / perRow);
+      var px = M + col * (tw + GAP), py = gridTop + gridOff + row * (ch + GAP);
+      if (q >= shown.length) {
+        drawCardBox(ctx, px, py, tw, ch, 8, 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.2)', 1.5);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = Math.round(ch * 0.3) + 'px ' + SHARE.DISPLAY;
+        ctx.textAlign = 'center';
+        ctx.fillText('+' + overflow, px + tw / 2, py + ch / 2 + ch * 0.1);
+        ctx.textAlign = 'left';
+        continue;
+      }
+      var e = shown[q], tb = badgeFor(e);
+      var border = tb ? tb.color : 'rgba(255,255,255,0.22)';
+      drawCardBox(ctx, px, py, tw, ch, 8, hexA('#000000', 0.4), border, 2);
+      var pw = tw - 2 * PAD, ph = Math.round(pw * 1.5);
+      drawPoster(ctx, e, tileImgs[q], px + PAD, py + PAD, pw, ph, 6);
+      var nr = tw >= 70 ? 11 : 9;
+      ctx.beginPath(); ctx.arc(px + PAD + nr + 3, py + PAD + nr + 3, nr, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(18,14,10,0.88)'; ctx.fill();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = AMBER; ctx.stroke();
+      ctx.fillStyle = AMBER;
+      ctx.font = (nr >= 11 ? 15 : 12) + 'px ' + SHARE.DISPLAY;
+      ctx.textAlign = 'center';
+      ctx.fillText(String(q + 1), px + PAD + nr + 3, py + PAD + nr + 3 + (nr >= 11 ? 5 : 4));
+      ctx.textAlign = 'left';
+      if (withText) {
+        var fs = 17;
+        var ttl = String(e.title || '').toUpperCase();
+        ctx.font = fs + 'px ' + SHARE.DISPLAY;
+        while (fs > 12 && ctx.measureText(ttl).width > tw - 12) { fs -= 1; ctx.font = fs + 'px ' + SHARE.DISPLAY; }
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.fillText(ellipsize(ctx, ttl, tw - 12), px + tw / 2, py + PAD + ph + 18);
+        if (num(e.rating) > 0) {
+          var sc2 = formatRating(e.rating);
+          ctx.font = '700 15px ' + SHARE.BODY;
+          var w1 = ctx.measureText(sc2).width;
+          ctx.font = '400 12px ' + SHARE.BODY;
+          var w2 = ctx.measureText('/10').width;
+          var sx = px + tw / 2 - (16 + w1 + w2) / 2;
+          drawStar(ctx, sx + 6, py + PAD + ph + 32, 6.5, tb ? tb.color : AMBER);
           ctx.textAlign = 'left';
-          ctx.textBaseline = 'alphabetic';
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '700 15px ' + SHARE.BODY;
+          ctx.fillText(sc2, sx + 16, py + PAD + ph + 37);
+          ctx.fillStyle = 'rgba(255,255,255,0.6)';
+          ctx.font = '400 12px ' + SHARE.BODY;
+          ctx.fillText('/10', sx + 16 + w1, py + PAD + ph + 37);
         }
+        ctx.textAlign = 'left';
+      } else if (tb) {
+        var br = Math.max(9, Math.min(15, Math.round(tw * 0.15)));
+        drawBadge(ctx, tb, px + tw - PAD - br - 2, py + PAD + br + 2, br);
       }
     }
 
-    // Rodapé: marca e episódios assistidos no total
-    // Legenda dos selos (só os que aparecem), com a quantidade de cada um
-    if (hasLegend) {
-      var counts = {};
-      shown.forEach(function (e) { var b = badgeFor(e); if (b) counts[b.key] = (counts[b.key] || 0) + 1; });
-      var lx = M, ly = footerY - 44;
+    // ---- Legenda dos selos ----
+    var counts = {};
+    shown.forEach(function (e) { var b = badgeFor(e); if (b) counts[b.key] = (counts[b.key] || 0) + 1; });
+    if (FMT.legendCard) {
+      drawCardBox(ctx, M, legendTop, CW, legendH, 16, hexA('#000000', 0.38), hexA(AMBER, 0.4), 1.2);
+      var lw3 = CW / 3;
+      ['skip', 'rec', 'must'].forEach(function (k, i) {
+        var b = BADGES[k], x = M + i * lw3;
+        if (i) { ctx.fillStyle = hexA(AMBER, 0.28); ctx.fillRect(x, legendTop + 14, 1, legendH - 28); }
+        var ix = x + 16 + 21, iy2 = legendTop + 36;
+        ctx.beginPath(); ctx.arc(ix, iy2, 21, 0, Math.PI * 2);
+        ctx.fillStyle = hexA(b.color, 0.12); ctx.fill();
+        ctx.lineWidth = 2.5; ctx.strokeStyle = b.color; ctx.stroke();
+        drawIcon(ctx, b.icon, ix, iy2, 24, b.color, '#1b140d');
+        var lx2 = x + 16 + 42 + 12, lmax = lw3 - 16 - 42 - 12 - 10;
+        ctx.fillStyle = b.color;
+        ctx.font = '22px ' + SHARE.DISPLAY;
+        var rg = b.range.toUpperCase();
+        ctx.fillText(rg, lx2, legendTop + 30);
+        if (counts[k]) {
+          ctx.fillStyle = 'rgba(255,255,255,0.75)';
+          ctx.font = '700 13px ' + SHARE.BODY;
+          ctx.fillText('· ' + counts[k], lx2 + (function () { ctx.font = '22px ' + SHARE.DISPLAY; return ctx.measureText(rg).width; })() + 8, legendTop + 29);
+        }
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.font = '400 13.5px ' + SHARE.BODY;
+        wrapLines(ctx, b.label, lmax).slice(0, 2).forEach(function (ln, j) { ctx.fillText(ln, lx2, legendTop + 49 + j * 16); });
+        drawCardBox(ctx, x + 16, legendTop + legendH - 14, lw3 - 32, 4, 2, b.color, null);
+      });
+    } else if (Object.keys(counts).length) {
+      var lx = M, ly = legendTop + 19;
       ['must', 'rec', 'skip'].forEach(function (k) {
         if (!counts[k]) return;
         var b = BADGES[k];
@@ -910,22 +1111,22 @@
       });
     }
 
-    ctx.fillStyle = 'rgba(255,255,255,0.16)';
-    ctx.fillRect(M, footerY - 22, CW, 1);
-    ctx.fillStyle = SHARE.GOLD;
-    ctx.font = '22px ' + SHARE.DISPLAY;
-    ctx.fillText('WAndCine', M, footerY);
-    if (d.movieMinutes + d.seriesMinutes) {
-      var tv = formatDuration(d.movieMinutes + d.seriesMinutes);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '700 16px ' + SHARE.BODY;
-      ctx.fillText(tv, W - M, footerY);
-      var tvW = ctx.measureText(tv).width;
-      ctx.fillStyle = 'rgba(255,255,255,0.62)';
-      ctx.font = '400 16px ' + SHARE.BODY;
-      ctx.fillText('Tempo total assistido: ', W - M - tvW, footerY);
-      ctx.textAlign = 'left';
+    // ---- Rodapé: marca e frase ----
+    drawIcon(ctx, 'clapper', M + 13, footerBase - 9, 26, AMBER, '#15110d');
+    ctx.fillStyle = AMBER;
+    ctx.font = '26px ' + SHARE.DISPLAY;
+    ctx.fillText('WANDCINE', M + 34, footerBase);
+    var brandEnd = M + 34 + ctx.measureText('WANDCINE').width;
+    ctx.font = '600 ' + (FMT.tagSize + 1) + 'px ' + SHARE.SCRIPT;
+    var foot = 'Bons filmes fazem grandes dias.';
+    var footW = ctx.measureText(foot).width;
+    var lineEnd = brandEnd + 24 + 80 <= W - M - footW - 16 ? W - M - footW - 16 : W - M;
+    ctx.fillStyle = hexA(AMBER, 0.4);
+    ctx.fillRect(brandEnd + 16, footerBase - 8, Math.max(0, lineEnd - brandEnd - 16), 1);
+    if (lineEnd < W - M) {
+      ctx.fillStyle = AMBER;
+      ctx.font = '600 ' + (FMT.tagSize + 1) + 'px ' + SHARE.SCRIPT;
+      ctx.fillText(foot, W - M - footW, footerBase - 2);
     }
 
     // Saída final: exatamente 800x800 ou 800x1000 (desenhado em 2x e reduzido para ficar nítido)
@@ -983,6 +1184,7 @@
   // ---- Logo ----
   function applyLogo(version) {
     var on = !!version;
+    logoVersion = version || null;
     document.getElementById('brand-logo').classList.toggle('hidden', !on);
     document.getElementById('brand-default').classList.toggle('hidden', on);
     document.getElementById('logo-btn').textContent = on ? 'Trocar logo' : 'Definir logo';
