@@ -100,3 +100,17 @@ test('CSV com ponto e vírgula (Excel em português) também é lido; tipos igno
   assert.deepEqual(items[0].genres, ['Drama', 'Policial']);
   assert.deepEqual({ ...summary.skippedTypes }, { tvEpisode: 1, videoGame: 1 });
 });
+
+test('tipos em português do IMDb: série, minissérie, curta e filme de TV entram; episódio fica de fora', () => {
+  const csv = 'Const,Your Rating,Title,Title Type,Year\n' +
+    'tt0000101,8,Serie A,Série de TV,2010\n' +
+    'tt0000102,7,Mini B,Minissérie de televisão,2011\n' +
+    'tt0000103,6,Curta C,Curta,2012\n' +
+    'tt0000104,9,Filme D,Filme de TV,2013\n' +
+    'tt0000105,5,Ep E,Episódio de TV,2014\n';
+  const { summary } = buildImport(csv, []);
+  assert.equal(summary.series, 2);
+  assert.equal(summary.movies, 2);
+  assert.equal(summary.skippedType, 1);
+  assert.deepEqual(summary.skippedTypes, { 'Episódio de TV': 1 });
+});
