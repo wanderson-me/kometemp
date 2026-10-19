@@ -414,6 +414,10 @@
     lines.push('🎬 WAndCine — ' + d.monthLabel);
     lines.push('');
     lines.push('Total: ' + d.totalMovies + ' filmes · ' + d.totalSeries + ' séries' + (d.totalEpisodes ? ' · ' + d.totalEpisodes.toLocaleString('pt-BR') + ' episódios' : ''));
+    var tparts = [];
+    if (d.movieMinutes) tparts.push(formatDuration(d.movieMinutes) + ' de filmes');
+    if (d.seriesMinutes) tparts.push(formatDuration(d.seriesMinutes) + ' de séries');
+    if (tparts.length) lines.push('Tempo assistido: ' + tparts.join(' + '));
     lines.push('');
     lines.push(cap + ': ' + d.monthMovies.length + (d.monthMovies.length === 1 ? ' filme' : ' filmes') + (d.monthMinutes ? ' (' + formatDuration(d.monthMinutes) + ')' : '') +
       ' · ' + d.monthSeries.length + (d.monthSeries.length === 1 ? ' série' : ' séries'));
@@ -423,7 +427,7 @@
       lines.push('', 'Nada registrado este mês ainda.');
     } else {
       if (d.monthMovies.length) { lines.push('', 'Filmes:'); d.monthMovies.forEach(function (e) { lines.push('• ' + e.title); }); }
-      if (d.monthSeries.length) { lines.push('', 'Séries:'); d.monthSeries.forEach(function (e) { lines.push('• ' + e.title); }); }
+      if (d.monthSeries.length) { lines.push('', 'Séries:'); d.monthSeries.forEach(function (e) { var pr = seriesProgress(e); lines.push('• ' + e.title + (pr ? ' — ' + pr : '')); }); }
     }
     return lines.join('\n');
   }
@@ -547,8 +551,18 @@
     ctx.restore();
   }
 
+  // "2 de 5 temp. · 42 ep." a partir dos campos da série.
+  function seriesProgress(e) {
+    var bits = [];
+    var x = String(e.extra || '').trim();
+    if (x) bits.push(/^\d+ de \d+$/.test(x) ? x + ' temp.' : (/^\d+$/.test(x) ? x + ' temp.' : x));
+    if (parseInt(e.episodes, 10) > 0) bits.push(e.episodes + ' ep.');
+    return bits.join(' · ');
+  }
+
   // Destaque do mês (filme ou série): pôster à esquerda, título, nota e gêneros à direita.
   function drawHero(ctx, entry, img, label, x0, y0, boxW, hh, titleSizes) {
+    var info = entry.type === 'series' ? seriesProgress(entry) : '';
     var hw = Math.round(hh / 1.5);
     var boxH = hh + 28;
     ctx.save();
@@ -574,7 +588,7 @@
 
     // O título maior que cabe: no máximo 2 (largo) ou 3 (estreito) linhas e ainda sobra espaço para a nota.
     var maxLines = boxW > 500 ? 2 : 3;
-    var availText = boxH - 54 - 12 - 36;
+    var availText = boxH - 54 - 12 - 36 - (info ? 22 : 0);
     var t = null;
     for (var si = 0; si < titleSizes.length && !t; si++) {
       ctx.font = titleSizes[si] + 'px ' + SHARE.DISPLAY;
@@ -597,13 +611,19 @@
     ctx.fillStyle = 'rgba(255,255,255,0.6)';
     ctx.font = '400 16px ' + SHARE.BODY;
     ctx.fillText('/10', tx + 32 + scoreW + 3, after + 8);
+    var rowY = after + 32;
+    if (info) {
+      ctx.fillStyle = 'rgba(255,255,255,0.82)';
+      ctx.font = '600 ' + (boxW > 500 ? 17 : 14) + 'px ' + SHARE.BODY;
+      ctx.fillText(ellipsize(ctx, info, tw), tx, rowY);
+      rowY += 24;
+    }
     var gtxt = (entry.genres && entry.genres.length) ? entry.genres.join(', ') : '';
-    var maxG = boxW > 500 ? 2 : 2;
-    if (gtxt && after + 30 + 16 < y0 + boxH) {
-      var gl = fitText(ctx, gtxt, SHARE.BODY, '400', boxW > 500 ? [18, 16] : [15, 13], tw, maxG);
+    if (gtxt && rowY + 12 < y0 + boxH) {
+      var gl = fitText(ctx, gtxt, SHARE.BODY, '400', boxW > 500 ? [18, 16] : [15, 13], tw, 1);
       ctx.fillStyle = 'rgba(255,255,255,0.68)';
       ctx.font = '400 ' + gl.size + 'px ' + SHARE.BODY;
-      gl.lines.forEach(function (ln, i) { ctx.fillText(ln, tx, after + 32 + i * (gl.size + 5)); });
+      gl.lines.forEach(function (ln, i) { ctx.fillText(ln, tx, rowY + i * (gl.size + 5)); });
     }
     return boxH;
   }
@@ -713,27 +733,27 @@
 
     // Números: assistidos no mês, com o total do catálogo logo abaixo
     var statsY = M + 78 + 24;
-    var colW = CW / 3;
-    var allMinutes = d.movieMinutes + d.seriesMinutes;
+    var colW = CW / 4;
     var stats = [
       { v: String(d.monthMovies.length), l: (d.monthMovies.length === 1 ? 'filme em ' : 'filmes em ') + d.monthName, s: d.totalMovies + ' no total' },
       { v: String(d.monthSeries.length), l: (d.monthSeries.length === 1 ? 'série em ' : 'séries em ') + d.monthName, s: d.totalSeries + ' no total' },
-      { v: d.monthMinutes ? formatDuration(d.monthMinutes) : '—', l: 'de filmes no mês', s: allMinutes ? formatDuration(allMinutes) + ' no total' : '' }
+      { v: d.monthMinutes ? formatDuration(d.monthMinutes) : '—', l: 'de filmes no mês', s: d.movieMinutes ? formatDuration(d.movieMinutes) + ' no total' : '' },
+      { v: d.totalEpisodes ? d.totalEpisodes.toLocaleString('pt-BR') : '—', l: 'episódios assistidos', s: d.seriesMinutes ? formatDuration(d.seriesMinutes) + ' de séries' : '' }
     ];
     stats.forEach(function (st, i) {
       var x = M + i * colW;
       ctx.fillStyle = '#ffffff';
       var vs = 60;
       ctx.font = vs + 'px ' + SHARE.DISPLAY;
-      while (vs > 30 && ctx.measureText(st.v).width > colW - 20) { vs -= 2; ctx.font = vs + 'px ' + SHARE.DISPLAY; }
+      while (vs > 30 && ctx.measureText(st.v).width > colW - 28) { vs -= 2; ctx.font = vs + 'px ' + SHARE.DISPLAY; }
       ctx.fillText(st.v, x, statsY + 50);
       ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.font = '400 16px ' + SHARE.BODY;
-      ctx.fillText(ellipsize(ctx, st.l, colW - 12), x, statsY + 74);
+      ctx.font = '400 15px ' + SHARE.BODY;
+      ctx.fillText(ellipsize(ctx, st.l, colW - 10), x, statsY + 74);
       if (st.s) {
         ctx.fillStyle = SHARE.STAR;
-        ctx.font = '600 14px ' + SHARE.BODY;
-        ctx.fillText(ellipsize(ctx, st.s, colW - 12), x, statsY + 94);
+        ctx.font = '600 13px ' + SHARE.BODY;
+        ctx.fillText(ellipsize(ctx, st.s, colW - 10), x, statsY + 94);
       }
     });
 
@@ -795,15 +815,16 @@
     ctx.fillStyle = SHARE.GOLD;
     ctx.font = '22px ' + SHARE.DISPLAY;
     ctx.fillText('WAndCine', M, footerY);
-    if (d.totalEpisodes) {
-      var ev = d.totalEpisodes.toLocaleString('pt-BR');
+    if (d.movieMinutes + d.seriesMinutes) {
+      var tv = formatDuration(d.movieMinutes + d.seriesMinutes);
       ctx.textAlign = 'right';
       ctx.fillStyle = '#ffffff';
       ctx.font = '700 16px ' + SHARE.BODY;
-      ctx.fillText(ev, W - M - ctx.measureText(' episódios assistidos').width, footerY);
+      ctx.fillText(tv, W - M, footerY);
+      var tvW = ctx.measureText(tv).width;
       ctx.fillStyle = 'rgba(255,255,255,0.62)';
       ctx.font = '400 16px ' + SHARE.BODY;
-      ctx.fillText(' episódios assistidos', W - M, footerY);
+      ctx.fillText('Tempo total assistido: ', W - M - tvW, footerY);
       ctx.textAlign = 'left';
     }
 
