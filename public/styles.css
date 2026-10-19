@@ -703,3 +703,4 @@ button, a, summary { -webkit-tap-highlight-color: transparent; }
   .detail-poster { flex-basis: 96px; }
   .detail-score { font-size: 1.7rem; }
 }
+.import-result .muted { color: var(--ink-soft); font-size: 0.85em; }

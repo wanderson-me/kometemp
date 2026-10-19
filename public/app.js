@@ -140,8 +140,8 @@
       if (totalMinutesS > 0) {
         extra += '<div><b>' + formatDuration(totalMinutesS) + '</b>assistidos</div>';
       }
-      var episodesThisMonth = list.reduce(function (s, e) { return s + (isSameMonth(e.date) ? (parseInt(e.episodes, 10) || 0) : 0); }, 0);
-      extra += '<div><b>' + episodesThisMonth + '</b>episódios este mês</div>';
+      var episodesTotal = list.reduce(function (s, e) { return s + (parseInt(e.episodes, 10) || 0); }, 0);
+      extra += '<div><b>' + episodesTotal.toLocaleString('pt-BR') + '</b>episódios assistidos</div>';
     }
     document.getElementById('stats').innerHTML =
       '<div><b>' + total + '</b>' + LABELS[state.activeTab].plural + ' registrados</div>' +
@@ -1466,6 +1466,12 @@
           r.skipped ? r.skipped + ' inválidos' : ''
         ].filter(Boolean).join(', ') + ')</li>');
       }
+      if (r.episodesMatched) {
+        li.push('<li>Episódios avaliados somados às séries: <b>' + r.episodesMatched.toLocaleString('pt-BR') + '</b> em <b>' + r.episodesSeries + '</b> séries' +
+          (r.seasonsLookup ? ' <span id="seasons-progress" class="muted">· buscando as temporadas no TMDB…</span>' : '') + '</li>');
+      }
+      var un = (r.episodesUnmatched || []).map(function (u) { return escapeHtml(u.title) + ' (' + u.count + ')'; }).join(', ');
+      if (un) li.push('<li>Episódios de séries que não estão no catálogo: ' + un + '. Adicione a série (com o link do IMDb) e importe de novo.</li>');
       el.innerHTML = '<h3>Importação do IMDb concluída</h3><ul>' + li.join('') + '</ul>' +
         '<p>Agora o catálogo tem <b>' + n('movie') + ' filmes</b> e <b>' + n('series') + ' séries</b>.</p>' +
         '<button type="button" class="btn-secondary" id="import-close">Fechar</button>';
@@ -1475,6 +1481,23 @@
   document.getElementById('import-result').addEventListener('click', function (e) {
     if (e.target.closest('#import-close')) this.classList.add('hidden');
   });
+
+  // Acompanha a busca de temporadas (segundo plano no servidor) e atualiza a lista quando termina.
+  function watchSeasons() {
+    function setText(t) { var el = document.getElementById('seasons-progress'); if (el) el.textContent = t; }
+    function tick() {
+      api('GET', '/api/episodes/sync').then(function (st) {
+        if (st.error) { setText('· temporadas: ' + st.error); return; }
+        if (st.running) { setText('· buscando as temporadas no TMDB… ' + st.done + '/' + st.total); setTimeout(tick, 2000); return; }
+        api('GET', '/api/entries').then(function (list) {
+          entries = visible(list);
+          render();
+          setText(st.failed ? '· temporadas atualizadas; ' + st.failed + ' episódios falharam (importe de novo para tentar outra vez)' : '· temporadas atualizadas');
+        });
+      }).catch(function () {});
+    }
+    setTimeout(tick, 800);
+  }
 
   var coversEnabled = false;
   document.getElementById('imdb-import-btn').addEventListener('click', function () {
@@ -1494,6 +1517,7 @@
           render();
           showImportResult(r, list);
           if (coversEnabled && r.created) syncCovers();
+          if (r.seasonsLookup && r.episodesMatched) watchSeasons();
         });
       }).catch(function (err) {
         showImportResult({ error: err.message });

@@ -43,4 +43,5 @@ legacy/          versão anterior, publicada como Claude Artifact
 | POST / GET | `/api/covers/sync` | iniciar / consultar a busca de capas no TMDB (precisa de `TMDB_API_KEY`) |
 | GET | `/api/export?covers=1` | backup em JSON |
 | POST | `/api/import` | restaurar backup |
-| POST | `/api/import/imdb` | importar CSV exportado do IMDb (corpo = texto do CSV) |
+| POST | `/api/import/imdb` | importar CSV exportado do IMDb (corpo = texto do CSV). Notas de episódios soltos somam "episódios assistidos" e "tempo assistido" da série |
+| GET/POST | `/api/episodes/sync` | estado / início da busca de temporadas dos episódios no TMDB (preenche "3 de 8" e o status; roda sozinha após importar) |

@@ -80,6 +80,38 @@ function createApp(cfg) {
     job.running = false;
   }
 
+  // Descobre a temporada de cada episódio avaliado (TMDB) e preenche "Temporadas assistidas" e o status.
+  let epJob = { running: false, total: 0, done: 0, series: 0, failed: 0, error: null };
+  async function runEpisodeSync() {
+    const todo = store.pendingEpisodes();
+    epJob = { running: true, total: todo.length, done: 0, series: 0, failed: 0, error: null };
+    const shows = new Map(); // entryId -> id da série no TMDB
+    const touched = new Set();
+    for (const ep of todo) {
+      try {
+        const info = await tmdb.episodeInfo(ep.tt);
+        store.setEpisodeSeason(ep.tt, info ? info.season : null);
+        if (info) { touched.add(ep.entryId); if (!shows.has(ep.entryId)) shows.set(ep.entryId, info.showId); }
+      } catch (err) {
+        if (err.fatal) { epJob.error = err.message; break; }
+        epJob.failed++; // fica pendente para a próxima vez
+      }
+      epJob.done++;
+      if (cfg.tmdbDelayMs > 0) await new Promise((r) => setTimeout(r, cfg.tmdbDelayMs));
+    }
+    for (const id of touched) {
+      let totals = null;
+      try { if (shows.get(id)) totals = await tmdb.showTotals(shows.get(id)); } catch (err) { if (err.fatal) { epJob.error = err.message; break; } }
+      store.applySeasons(id, totals ? totals.seasons : 0, totals ? totals.episodes : 0);
+      epJob.series++;
+    }
+    epJob.running = false;
+  }
+  function startEpisodeSync() {
+    if (!tmdb || epJob.running) return;
+    runEpisodeSync().catch((err) => { epJob.running = false; epJob.error = err.message; });
+  }
+
   if (cfg.autoSeed && store.count() === 0 && fs.existsSync(cfg.seedFile)) {
     try {
       const items = JSON.parse(fs.readFileSync(cfg.seedFile, 'utf8'));
@@ -284,6 +316,12 @@ function createApp(cfg) {
       if (method === 'GET') return json(req, res, 200, job);
     }
 
+    if (p === '/api/episodes/sync') {
+      if (!tmdb) return json(req, res, 503, { error: 'Defina TMDB_API_KEY no servidor para buscar as temporadas.' });
+      if (method === 'POST') { startEpisodeSync(); return json(req, res, 202, epJob); }
+      if (method === 'GET') return json(req, res, 200, epJob);
+    }
+
     if (p === '/api/entries' && method === 'GET') return json(req, res, 200, store.list());
     if (p === '/api/entries' && method === 'POST') {
       return json(req, res, 201, await autoCover(store.create(await readJson(req, 64 * 1024))));
@@ -300,8 +338,15 @@ function createApp(cfg) {
       const csv = (await readBody(req, 20 * 1024 * 1024)).toString('utf8');
       const { items, summary } = imdbImport.buildImport(csv, store.list());
       const result = store.importMany(items, { ratingScale: 10 });
-      console.log('[import imdb]', JSON.stringify(Object.assign({}, summary, result)));
-      return json(req, res, 200, Object.assign({}, summary, result));
+      // Episódios avaliados contam como progresso da série (já com as séries novas gravadas).
+      const eps = imdbImport.buildEpisodes(csv, store.list());
+      const saved = store.setEpisodes(eps.groups);
+      const out = Object.assign({}, summary, result, {
+        episodesMatched: eps.matched, episodesSeries: saved.series, episodesUnmatched: eps.unmatched.slice(0, 12), seasonsLookup: !!tmdb
+      });
+      console.log('[import imdb]', JSON.stringify(Object.assign({}, out, { episodesUnmatched: eps.unmatched.length })));
+      startEpisodeSync();
+      return json(req, res, 200, out);
     }
     if (p === '/api/import' && method === 'POST') {
       const items = await readJson(req, 100 * 1024 * 1024);
