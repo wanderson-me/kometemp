@@ -551,6 +551,74 @@
     ctx.restore();
   }
 
+  // ---- Selos por nota (imagem de compartilhamento) ----
+  var BADGES = {
+    skip: { key: 'skip', label: 'Quero meu tempo de volta', color: '#c8452f' },
+    rec: { key: 'rec', label: 'Fica a indicação', color: '#2f9a7d' },
+    must: { key: 'must', label: 'Já deveria ter assistido', color: '#e8c267' }
+  };
+  // Até 4: não valeu o tempo · 5 a 8: vale a indicação · 9 e 10: obrigatório. Sem nota: sem selo.
+  function badgeFor(e) {
+    var r = Math.round(num(e.rating));
+    if (r <= 0) return null;
+    if (r <= 4) return BADGES.skip;
+    if (r <= 8) return BADGES.rec;
+    return BADGES.must;
+  }
+
+  // Disco colorido com anel claro e um ícone desenhado em código (estrela, joinha, ampulheta).
+  function drawBadge(ctx, b, cx, cy, r) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = r * 0.5;
+    ctx.shadowOffsetY = r * 0.18;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = b.color;
+    ctx.fill();
+    ctx.restore();
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r - r * 0.07, 0, Math.PI * 2);
+    ctx.lineWidth = Math.max(1.5, r * 0.14);
+    ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+    ctx.stroke();
+    if (b.key === 'must') {
+      drawStar(ctx, cx, cy + r * 0.04, r * 0.62, '#4a3206');
+    } else {
+      // ícones em uma grade 24x24, centralizados no disco
+      var k = r * 1.05 / 24;
+      ctx.translate(cx - 12 * k, cy - 12 * k);
+      ctx.scale(k, k);
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#ffffff';
+      if (b.key === 'rec') {
+        ctx.beginPath(); // punho
+        ctx.rect(3, 11, 4, 10);
+        ctx.fill();
+        ctx.beginPath(); // mão com o polegar para cima
+        ctx.moveTo(9, 21); ctx.lineTo(9, 11); ctx.lineTo(13, 3);
+        ctx.bezierCurveTo(14.6, 3, 15.6, 4.3, 15.1, 6);
+        ctx.lineTo(14, 10); ctx.lineTo(19.5, 10);
+        ctx.bezierCurveTo(20.9, 10, 21.8, 11.3, 21.4, 12.6);
+        ctx.lineTo(19.7, 19);
+        ctx.bezierCurveTo(19.4, 20.1, 18.5, 21, 17.3, 21);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.lineWidth = 2.2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath(); ctx.moveTo(6, 3.5); ctx.lineTo(18, 3.5); ctx.moveTo(6, 20.5); ctx.lineTo(18, 20.5); ctx.stroke();
+        ctx.beginPath(); // ampulheta
+        ctx.moveTo(7.5, 3.5); ctx.lineTo(16.5, 3.5); ctx.lineTo(12, 12); ctx.closePath(); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(12, 12); ctx.lineTo(16.5, 20.5); ctx.lineTo(7.5, 20.5); ctx.closePath(); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
   // "2 de 5 temp. · 42 ep." a partir dos campos da série.
   function seriesProgress(e) {
     var bits = [];
@@ -593,7 +661,8 @@
     for (var si = 0; si < titleSizes.length && !t; si++) {
       ctx.font = titleSizes[si] + 'px ' + SHARE.DISPLAY;
       var tl = wrapLines(ctx, entry.title, tw);
-      if (tl.length <= maxLines && tl.length * titleSizes[si] * 0.98 <= availText) t = { size: titleSizes[si], lines: tl };
+      var widest = tl.reduce(function (m, ln) { return Math.max(m, ctx.measureText(ln).width); }, 0);
+      if (tl.length <= maxLines && widest <= tw && tl.length * titleSizes[si] * 0.98 <= availText) t = { size: titleSizes[si], lines: tl };
     }
     if (!t) t = fitText(ctx, entry.title, SHARE.DISPLAY, '', [titleSizes[titleSizes.length - 1]], tw, maxLines);
     ctx.fillStyle = '#ffffff';
@@ -611,6 +680,11 @@
     ctx.fillStyle = 'rgba(255,255,255,0.6)';
     ctx.font = '400 16px ' + SHARE.BODY;
     ctx.fillText('/10', tx + 32 + scoreW + 3, after + 8);
+    var heroBadge = badgeFor(entry);
+    if (heroBadge) {
+      var slashW = ctx.measureText('/10').width;
+      drawBadge(ctx, heroBadge, tx + 32 + scoreW + 3 + slashW + 22, after, 12);
+    }
     var rowY = after + 32;
     if (info) {
       ctx.fillStyle = 'rgba(255,255,255,0.82)';
@@ -652,7 +726,8 @@
     var headBottom = M + 78 + 24 + 96 + 24;           // fim do cabeçalho + números do mês
     var regionTop = headBottom + (heroes.length ? HERO_BOX + 26 : 0);
     var footerY = H - M + 4;
-    var regionBottom = footerY - 34;
+    var hasLegend = d.monthItems.some(function (e) { return !!badgeFor(e); });
+    var regionBottom = footerY - 34 - (hasLegend ? 30 : 0);
     var gridTop = regionTop + 36;
     var availH = regionBottom - gridTop;
     var tileW = 48, perRow = 1, rows = 1, overflow = 0;
@@ -792,6 +867,11 @@
         var px = gx + col * (tileW + 8), py = gy + row * (tileH + 8);
         if (q < shown.length) {
           drawPoster(ctx, shown[q], tileImgs[q], px, py, tileW, tileH, 6);
+          var tb = badgeFor(shown[q]);
+          if (tb) {
+            var br = Math.max(11, Math.min(20, Math.round(tileW * 0.16)));
+            drawBadge(ctx, tb, px + tileW - br - 3, py + br + 3, br);
+          }
         } else {
           ctx.save();
           roundRectPath(ctx, px, py, tileW, tileH, 6);
@@ -810,6 +890,26 @@
     }
 
     // Rodapé: marca e episódios assistidos no total
+    // Legenda dos selos (só os que aparecem), com a quantidade de cada um
+    if (hasLegend) {
+      var counts = {};
+      shown.forEach(function (e) { var b = badgeFor(e); if (b) counts[b.key] = (counts[b.key] || 0) + 1; });
+      var lx = M, ly = footerY - 44;
+      ['must', 'rec', 'skip'].forEach(function (k) {
+        if (!counts[k]) return;
+        var b = BADGES[k];
+        drawBadge(ctx, b, lx + 10, ly - 5, 10);
+        ctx.fillStyle = 'rgba(255,255,255,0.82)';
+        ctx.font = '400 14px ' + SHARE.BODY;
+        ctx.fillText(b.label, lx + 28, ly);
+        var lw = ctx.measureText(b.label).width;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '700 14px ' + SHARE.BODY;
+        ctx.fillText(String(counts[k]), lx + 28 + lw + 6, ly);
+        lx += 28 + lw + 6 + ctx.measureText(String(counts[k])).width + 22;
+      });
+    }
+
     ctx.fillStyle = 'rgba(255,255,255,0.16)';
     ctx.fillRect(M, footerY - 22, CW, 1);
     ctx.fillStyle = SHARE.GOLD;
