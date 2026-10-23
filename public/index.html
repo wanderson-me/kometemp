@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#1c1914">
+<meta name="theme-color" content="#faf6ee">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="WAndCine">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>WAndCine — filmes e séries</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -32,10 +32,12 @@
       <span class="brand-logo-disc"><img id="brand-logo-img" alt="WAndCine" width="256" height="256"></span>
       <span class="brand-logo-name">WAndCine</span>
     </a>
+    <button class="top-btn" id="top-search-btn" type="button" aria-label="Buscar" aria-expanded="false"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
     <nav class="side-nav">
-      <button class="tab tab--movie" data-type="movie"><span class="nav-dot"></span>Filmes<span class="tab-count" id="count-movie"></span></button>
-      <button class="tab tab--series" data-type="series"><span class="nav-dot"></span>Séries<span class="tab-count" id="count-series"></span></button>
-      <button class="tab tab--share" data-type="share"><span class="nav-dot"></span>Compartilhar</button>
+      <button class="tab tab--movie" data-type="movie"><svg class="tab-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18v16H3zM7 4v16M17 4v16M3 9h4M17 9h4M3 15h4M17 15h4"/></svg><span class="nav-dot"></span>Filmes<span class="tab-count" id="count-movie"></span></button>
+      <button class="tab tab--series" data-type="series"><svg class="tab-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18v11H3zM8 21h8M12 16v5"/></svg><span class="nav-dot"></span>Séries<span class="tab-count" id="count-series"></span></button>
+      <button class="tab tab--share" data-type="share"><svg class="tab-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg><span class="nav-dot"></span>Compartilhar</button>
+      <button class="tab tab--more" id="more-btn" type="button" aria-haspopup="true" aria-expanded="false"><svg class="tab-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg>Mais</button>
     </nav>
     <div class="sidebar-foot">
       <button class="foot-link hidden" id="covers-btn" type="button">Buscar capas</button>
@@ -51,6 +53,8 @@
   <div class="main">
     <section class="toolbar">
       <input type="search" id="search-input" placeholder="Buscar por título…">
+      <div class="chips">
+      <button type="button" class="chip-btn hidden" id="genre-chip" aria-expanded="false">Gêneros</button>
       <select id="rating-filter" aria-label="Filtrar por nota">
         <option value="all">Todas as notas</option>
         <optgroup label="Faixas">
@@ -69,6 +73,7 @@
         <option value="title">Título (A–Z)</option>
         <option value="rating">Melhor nota</option>
       </select>
+      </div>
       <button id="add-btn" class="btn-add">+ Adicionar</button>
     </section>
 
@@ -89,6 +94,7 @@
     <p id="empty-state" class="empty hidden"></p>
   </div>
 </div>
+<div id="more-backdrop" class="more-backdrop"></div>
 <div id="toast" class="toast hidden"></div>
 <script src="/app.js"></script>
 </body>

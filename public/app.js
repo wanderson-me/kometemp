@@ -86,6 +86,11 @@
     return out3;
   }
 
+  // Versão curta para o celular: "1 mês 18 dias" vira "1m 18d".
+  function shortDuration(min) {
+    return formatDuration(min).replace(/ (meses|mês)/, 'm').replace(/ (dias|dia)/, 'd').replace(/ (anos|ano)/, 'a');
+  }
+
   function showToast(msg) {
     var t = document.getElementById('toast');
     t.textContent = msg;
@@ -123,6 +128,12 @@
     return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
   }
 
+  // Cada número tem texto completo (computador) e curto (celular).
+  function statCell(value, long, short, valueShort) {
+    return '<div><b>' + (valueShort ? '<span class="lg">' + value + '</span><span class="sh">' + valueShort + '</span>' : value) + '</b>' +
+      '<span class="lg">' + long + '</span><span class="sh">' + (short || long) + '</span></div>';
+  }
+
   function renderStats() {
     var list = entries.filter(function (e) { return e.type === state.activeTab; });
     var total = list.length;
@@ -132,23 +143,23 @@
     if (state.activeTab === 'movie') {
       var totalMinutes = list.reduce(function (s, e) { return s + (parseInt(e.duration, 10) || 0); }, 0);
       if (totalMinutes > 0) {
-        extra += '<div><b>' + formatDuration(totalMinutes) + '</b>assistidos</div>';
+        extra += statCell(formatDuration(totalMinutes), 'assistidos', 'assistidos', shortDuration(totalMinutes));
       }
       var moviesThisMonth = list.filter(function (e) { return isSameMonth(e.date); }).length;
-      extra += '<div><b>' + moviesThisMonth + '</b>assistidos este mês</div>';
+      extra += statCell(moviesThisMonth, 'assistidos este mês', 'este mês');
     } else {
       var completas = list.filter(function (e) { return e.status === 'Completa'; }).length;
-      extra = '<div><b>' + completas + '</b>completas</div>';
+      extra = statCell(completas, 'completas', 'completas');
       var totalMinutesS = list.reduce(function (s, e) { return s + (parseInt(e.duration, 10) || 0); }, 0);
       if (totalMinutesS > 0) {
-        extra += '<div><b>' + formatDuration(totalMinutesS) + '</b>assistidos</div>';
+        extra += statCell(formatDuration(totalMinutesS), 'assistidos', 'assistidos', shortDuration(totalMinutesS));
       }
       var episodesTotal = list.reduce(function (s, e) { return s + (parseInt(e.episodes, 10) || 0); }, 0);
-      extra += '<div><b>' + episodesTotal.toLocaleString('pt-BR') + '</b>episódios assistidos</div>';
+      extra += statCell(episodesTotal.toLocaleString('pt-BR'), 'episódios assistidos', 'episódios');
     }
     document.getElementById('stats').innerHTML =
-      '<div><b>' + total + '</b>' + LABELS[state.activeTab].plural + ' registrados</div>' +
-      '<div><b>' + avg + '</b>nota média</div>' + extra;
+      statCell(total, LABELS[state.activeTab].plural + ' registrados', LABELS[state.activeTab].plural) +
+      statCell(avg, 'nota média', 'nota média') + extra;
   }
 
   function metaLine(e) {
@@ -267,7 +278,8 @@
       var posterInner = hasCover
         ? '<div class="poster-img" style="background-image:url(&quot;' + escapeHtml(e.coverUrl) + '&quot;)"></div>'
         : '<div class="poster-img poster-placeholder" style="' + posterPlaceholder(e) + '"><span class="poster-initial">' + escapeHtml((e.title || '?').trim().charAt(0).toUpperCase()) + '</span></div>';
-      var ratingBadge = e.rating ? '<span class="poster-rating">★ ' + formatRating(e.rating) + '</span>' : '';
+      var tierB = badgeFor(e);
+      var ratingBadge = e.rating ? '<span class="poster-rating tier-' + (tierB ? tierB.key : 'rec') + '">★ ' + formatRating(e.rating) + '</span>' : '';
       var statusBadge = e.status ? '<span class="poster-status">' + escapeHtml(e.status) + '</span>' : '';
       var genreHtml = '';
       if (e.genres && e.genres.length) {
@@ -297,6 +309,8 @@
 
   function renderGenreBreakdown() {
     var panel = document.getElementById('genre-breakdown');
+    var chip = document.getElementById('genre-chip');
+    chip.classList.toggle('hidden', state.activeTab !== 'movie');
     if (state.activeTab !== 'movie') {
       panel.classList.add('hidden');
       panel.innerHTML = '';
@@ -320,6 +334,10 @@
     var max = list[0].count;
     panel.classList.remove('hidden');
     var collapsed = !!state.genreBreakdownCollapsed;
+    panel.classList.toggle('is-collapsed', collapsed);
+    chip.textContent = state.genreFilter || 'Gêneros';
+    chip.classList.toggle('on', !!state.genreFilter);
+    chip.setAttribute('aria-expanded', String(!collapsed));
     var TOP = 8;
     var rows = list;
     if (!state.genreShowAll && list.length > TOP) {
@@ -1536,6 +1554,7 @@
             (entry.rating ? '<span class="detail-score">★ ' + formatRating(entry.rating) + '<small>/10</small></span><span class="detail-score-label">sua nota</span>' : '<span class="detail-muted">Sem nota</span>') +
             '<span class="detail-chip hidden" id="detail-tmdb-score"></span>' +
           '</p>' +
+          (badgeFor(entry) ? '<p class="detail-tier-wrap"><span class="detail-tier tier-' + badgeFor(entry).key + '">' + badgeFor(entry).label + '</span></p>' : '') +
         '</div>' +
       '</div>' +
       '<div id="detail-extra"><p class="detail-muted">Carregando detalhes…</p></div>' +
@@ -1641,7 +1660,7 @@
     }
   }
 
-  document.querySelectorAll('.tab').forEach(function (btn) {
+  document.querySelectorAll('.tab[data-type]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       state.activeTab = btn.dataset.type;
       state.search = '';
@@ -1649,9 +1668,46 @@
       state.ratingFilter = 'all';
       document.getElementById('search-input').value = '';
       document.getElementById('rating-filter').value = 'all';
+      document.body.classList.remove('search-open', 'more-open');
       closeForm();
       render();
     });
+  });
+
+  // ---- Celular: menu "Mais", busca e chip de gêneros ----
+  function setMore(open) {
+    document.body.classList.toggle('more-open', open);
+    document.getElementById('more-btn').setAttribute('aria-expanded', String(open));
+  }
+  function setSearchOpen(open) {
+    document.body.classList.toggle('search-open', open);
+    document.getElementById('top-search-btn').setAttribute('aria-expanded', String(open));
+    if (open) document.getElementById('search-input').focus();
+  }
+  document.getElementById('more-btn').addEventListener('click', function () {
+    setMore(!document.body.classList.contains('more-open'));
+  });
+  document.getElementById('more-backdrop').addEventListener('click', function () { setMore(false); });
+  document.querySelector('.sidebar-foot').addEventListener('click', function (e) {
+    if (e.target.closest('button, a')) setMore(false);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && document.body.classList.contains('more-open')) setMore(false);
+  });
+  document.getElementById('top-search-btn').addEventListener('click', function () {
+    var open = !document.body.classList.contains('search-open');
+    if (!open && state.search.trim()) {
+      // fechar a busca com texto digitado também limpa o filtro
+      state.search = '';
+      document.getElementById('search-input').value = '';
+      renderList();
+    }
+    if (open && state.activeTab === 'share') { state.activeTab = 'movie'; render(); }
+    setSearchOpen(open);
+  });
+  document.getElementById('genre-chip').addEventListener('click', function () {
+    state.genreBreakdownCollapsed = !state.genreBreakdownCollapsed;
+    renderGenreBreakdown();
   });
 
   document.getElementById('share-view').addEventListener('click', function (e) {
