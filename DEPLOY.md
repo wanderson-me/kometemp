@@ -92,6 +92,46 @@ Só os aparelhos da sua conta Tailscale acessam, e não é preciso abrir portas 
 
 A logo é enviada pela própria interface (**Trocar logo**) e vira o ícone do app; envie-a antes de instalar. Se trocar depois, remova o app da tela inicial e instale de novo para atualizar o ícone.
 
+### Endereço próprio (ex.: filmes.seudominio.com) só para a sua rede Tailscale
+
+Serve quando o DNS do domínio não tem API (por exemplo, Umbler). Só acrescenta dois registros no DNS e não mexe nos existentes (e-mail, site etc.). O certificado HTTPS é emitido pelo Caddy com a validação por DNS via acme-dns, sem abrir nenhuma porta.
+
+1. No container: `tailscale ip -4` (IP que começa com `100.`) e `curl -s -X POST https://auth.acme-dns.io/register` (guarde `username`, `password`, `subdomain` e `fulldomain`; não compartilhe).
+2. No DNS do domínio, crie: registro **A** `filmes` → IP `100.…` e **CNAME** `_acme-challenge.filmes` → o `fulldomain` do acme-dns.
+3. O Caddy precisa do plugin `caddy-dns/acmedns`. O `caddy add-package` depende de um servidor de build que às vezes não responde; o caminho que funciona sempre é compilar no container (suba a memória do LXC para 2048 MB e o swap para 1024 MB durante a compilação; depois volte):
+   ```
+   apt install -y golang-go debian-keyring debian-archive-keyring apt-transport-https curl gpg
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/xcaddy/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-xcaddy-archive-keyring.gpg
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/xcaddy/debian.deb.txt' > /etc/apt/sources.list.d/caddy-xcaddy.list
+   apt update && apt install -y caddy xcaddy
+   cd /root && xcaddy build --with github.com/caddy-dns/acmedns --output /root/caddy-custom
+   chmod +x /root/caddy-custom && systemctl stop caddy
+   dpkg-divert --divert /usr/bin/caddy.default --rename /usr/bin/caddy
+   mv /root/caddy-custom /usr/bin/caddy.custom
+   update-alternatives --install /usr/bin/caddy caddy /usr/bin/caddy.default 10
+   update-alternatives --install /usr/bin/caddy caddy /usr/bin/caddy.custom 50
+   caddy list-modules | grep acmedns
+   ```
+   As atualizações do `apt` não trocam esse binário; para atualizar o Caddy, repita a compilação.
+4. `/etc/caddy/Caddyfile` (edite no `nano`; não cole no terminal):
+   ```
+   filmes.seudominio.com {
+       tls {
+           dns acmedns {
+               username SEU_USERNAME
+               password SUA_PASSWORD
+               subdomain SEU_SUBDOMAIN
+               server_url https://auth.acme-dns.io
+           }
+       }
+       reverse_proxy 127.0.0.1:3000
+   }
+   ```
+5. O Caddy usa a porta 443, então desligue o `tailscale serve` (`tailscale serve reset`); o endereço `.ts.net` deixa de funcionar. Depois: `systemctl restart caddy` e confira com `journalctl -u caddy -n 100 --no-pager | grep -iE "obtain|certificate|error"`.
+6. Em `/etc/meu-arquivo.env`, defina `TRUST_PROXY=1` e `COOKIE_SECURE=1` e reinicie o app. Com o cookie seguro, o login não funciona em `http://IP:3000`; use sempre o endereço novo e reinstale o app por ele.
+
 ## Importar o CSV exportado do IMDb
 
 1. No IMDb, abra **Suas avaliações** (ou uma lista sua) e use **Exportar** para baixar o CSV.
