@@ -211,6 +211,9 @@
     color: var(--ink);
   }
   .genre-toggle-icon { margin-left: 6px; opacity: 0.55; font-size: 0.82rem; }
+  .genre-total { margin-left: 10px; font-family: var(--font-body); font-size: 0.78rem; font-weight: 500; color: var(--ink-soft); letter-spacing: 0; }
+  .genre-more { all: unset; box-sizing: border-box; cursor: pointer; display: block; margin: 10px auto 0; padding: 6px 12px; font-size: 0.82rem; font-weight: 600; color: var(--movie-deep); text-decoration: underline; text-underline-offset: 3px; }
+  .genre-more:focus-visible { outline: 2px solid var(--movie); outline-offset: 2px; border-radius: 6px; }
   .genre-clear {
     background: none;
     border: 1px solid var(--line);

@@ -21,7 +21,9 @@
     formOpen: false,
     genreFilter: null,
     ratingFilter: 'all',
-    genreBreakdownCollapsed: false
+    // A lista de gêneros começa recolhida e, aberta, mostra só os mais frequentes (com "Ver todos").
+    genreBreakdownCollapsed: true,
+    genreShowAll: false
   };
 
   // ---- API ----
@@ -308,12 +310,22 @@
     var max = list[0].count;
     panel.classList.remove('hidden');
     var collapsed = !!state.genreBreakdownCollapsed;
+    var TOP = 8;
+    var rows = list;
+    if (!state.genreShowAll && list.length > TOP) {
+      rows = list.slice(0, TOP);
+      // O gênero filtrado sempre aparece, mesmo fora dos mais frequentes.
+      var act = list.filter(function (i) { return i.genre === state.genreFilter; })[0];
+      if (act && rows.indexOf(act) === -1) rows.push(act);
+    }
+    var hidden = list.length - rows.length;
     panel.innerHTML =
-      '<div class="genre-breakdown-head" id="genre-breakdown-toggle" role="button" tabindex="0">' +
-        '<h3>Filmes por gênero <span class="genre-toggle-icon">' + (collapsed ? '▸' : '▾') + '</span></h3>' +
+      '<div class="genre-breakdown-head" id="genre-breakdown-toggle" role="button" tabindex="0" aria-expanded="' + (!collapsed) + '">' +
+        '<h3>Filmes por gênero <span class="genre-toggle-icon">' + (collapsed ? '▸' : '▾') + '</span>' +
+        '<span class="genre-total">' + list.length + (list.length === 1 ? ' gênero' : ' gêneros') + (collapsed && state.genreFilter ? ' · ' + escapeHtml(state.genreFilter) : '') + '</span></h3>' +
         (state.genreFilter ? '<button type="button" class="genre-clear" id="genre-clear-btn">Limpar filtro ✕</button>' : '') +
       '</div>' +
-      (collapsed ? '' : list.map(function (item) {
+      (collapsed ? '' : rows.map(function (item) {
         var pct = Math.max(6, Math.round((item.count / max) * 100));
         var active = state.genreFilter === item.genre;
         return '<div class="genre-row' + (active ? ' active' : '') + '" data-genre="' + escapeHtml(item.genre) + '" role="button" tabindex="0">' +
@@ -321,7 +333,9 @@
           '<div class="genre-bar-track"><div class="genre-bar-fill" style="width:' + pct + '%"></div></div>' +
           '<span class="genre-count">' + item.count + '</span>' +
         '</div>';
-      }).join(''));
+      }).join('') +
+      (list.length > TOP ? '<button type="button" class="genre-more" id="genre-more-btn">' +
+        (state.genreShowAll ? 'Mostrar só os principais' : 'Ver todos os ' + list.length + ' gêneros' + (hidden ? ' (+' + hidden + ')' : '')) + '</button>' : ''));
   }
 
   var MONTH_NAMES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
@@ -1653,6 +1667,11 @@
       renderList();
       return;
     }
+    if (e.target.closest('#genre-more-btn')) {
+      state.genreShowAll = !state.genreShowAll;
+      renderGenreBreakdown();
+      return;
+    }
     var toggleHead = e.target.closest('#genre-breakdown-toggle');
     if (toggleHead) {
       state.genreBreakdownCollapsed = !state.genreBreakdownCollapsed;
@@ -1665,6 +1684,10 @@
     state.genreFilter = (state.genreFilter === genre) ? null : genre;
     renderGenreBreakdown();
     renderList();
+  });
+
+  document.getElementById('genre-breakdown').addEventListener('keydown', function (e) {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role="button"]')) { e.preventDefault(); e.target.click(); }
   });
 
   document.getElementById('search-input').addEventListener('input', function (e) {
