@@ -235,7 +235,17 @@
     } else if (state.sort === 'rating') {
       list.sort(function (a, b) { return (b.rating || 0) - (a.rating || 0); });
     } else {
-      list.sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+      // Padrão: pela data em que foi assistido, da mais recente para a mais antiga.
+      // Empate: o cadastrado por último primeiro. Sem data: depois dos que têm data.
+      list.sort(function (a, b) {
+        var da = a.date || '', db = b.date || '';
+        if (da !== db) {
+          if (!da) return 1;
+          if (!db) return -1;
+          return db.localeCompare(da);
+        }
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      });
     }
 
     renderFilterSummary(list.length, tabTotal);
